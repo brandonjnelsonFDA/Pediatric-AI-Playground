@@ -1,0 +1,10 @@
+jupyter
+scikit-learn
+scikit-image
+nibabel
+seaborn
+dotenv
+pydicom
+albumentations
+torchvision
+git+https://github.com/DIDSR/InSilicoICH.git
