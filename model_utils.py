@@ -14,9 +14,44 @@ import numpy as np
 import pydicom
 import nibabel as nib
 import skimage
-from VITools.phantom import resize
+from skimage.transform import resize
 
 
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+    def forward(self, x):
+        return x
+
+class SpatialDropout(nn.Dropout2d):
+    def forward(self, x):
+        x = x.unsqueeze(2)
+        x = x.permute(0, 3, 2, 1)
+        x = super(SpatialDropout, self).forward(x)
+        x = x.permute(0, 3, 2, 1)
+        x = x.squeeze(2)
+        return x
+
+class NeuralNet(nn.Module):
+    def __init__(self, embed_size=2048*3, LSTM_UNITS=64, DO=0.3):
+        super(NeuralNet, self).__init__()
+        self.embedding_dropout = SpatialDropout(0.0)
+        self.lstm1 = nn.LSTM(embed_size, LSTM_UNITS, bidirectional=True, batch_first=True)
+        self.lstm2 = nn.LSTM(LSTM_UNITS * 2, LSTM_UNITS, bidirectional=True, batch_first=True)
+        self.linear1 = nn.Linear(LSTM_UNITS*2, LSTM_UNITS*2)
+        self.linear2 = nn.Linear(LSTM_UNITS*2, LSTM_UNITS*2)
+        self.linear = nn.Linear(LSTM_UNITS*2, 6)
+
+    def forward(self, x, lengths=None):
+        h_embedding = x
+        h_embadd = torch.cat((h_embedding[:,:,:2048], h_embedding[:,:,:2048]), -1)
+        h_lstm1, _ = self.lstm1(h_embedding)
+        h_lstm2, _ = self.lstm2(h_lstm1)
+        h_conc_linear1 = F.relu(self.linear1(h_lstm1))
+        h_conc_linear2 = F.relu(self.linear2(h_lstm2))
+        hidden = h_lstm1 + h_lstm2 + h_conc_linear1 + h_conc_linear2 + h_embadd
+        output = self.linear(hidden)
+        return output
 
 def apply_window(image, center, width):
     """Applies a windowing function to a grayscale image.
@@ -310,3 +345,82 @@ def download_and_unzip(url, extract_to='.'):
         print("Error: The downloaded file is not a valid zip file.")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
+
+
+class InferenceManager:
+    def __init__(self, model_path, device='cuda'):
+        self.model_path = Path(model_path)
+        self.device = device
+        self.labels = ['EDH', 'IPH', 'IVH', 'SAH', 'SDH', 'Any']
+        mean_img = [0.22363983, 0.18190407, 0.2523437]
+        std_img = [0.32451536, 0.2956294, 0.31335256]
+        self.transform = A.Normalize(mean=mean_img, std=std_img, max_pixel_value=255.0, p=1.0)
+        self._load_models()
+        self.patient_images = None
+        self.patient_predictions = None
+
+    def _load_models(self):
+        # Load classifier model
+        self.classifier_model = torch.load(self.model_path, weights_only=False, map_location=self.device)
+        self.classifier_model.fc = nn.Linear(2048, 6)
+        self.classifier_model.to(self.device)
+        self.classifier_model = nn.DataParallel(self.classifier_model, device_ids=list(range(1)), output_device=self.device)
+        for param in self.classifier_model.parameters():
+            param.requires_grad = False
+        self.classifier_model.load_state_dict(torch.load(next(self.model_path.parent.glob('model_*.bin')), map_location=self.device))
+
+        self.classifier_model.module.fc = Identity()
+        self.classifier_model.eval()
+
+        # Load LSTM model
+        self.lstm_model = NeuralNet(LSTM_UNITS=2048, DO=0.3)
+        self.lstm_model = self.lstm_model.to(self.device)
+        self.lstm_model.load_state_dict(torch.load(next(self.model_path.parent.glob('lstm_*.bin')), map_location=self.device))
+        for param in self.lstm_model.parameters():
+            param.requires_grad = False
+        self.lstm_model.eval()
+
+    def _preprocess_image(self, image):
+        image = apply_window_policy(image)
+        image -= image.min((0, 1))
+        image = (255 * image).astype(np.uint8)
+        image = resize(image, (480, 480))
+        result = self.transform(image=image)
+        image = torch.from_numpy(result["image"])
+        image = torch.permute(image, (2, 1, 0)).unsqueeze(0)
+        return image
+
+    def _run_inference(self, volume):
+        num_images = volume.shape[0]
+        embeddings = np.zeros((num_images, 2048))
+        for idx in range(num_images):
+            slice = volume[idx, :, :, :].unsqueeze(0).to(self.device)
+            out = self.classifier_model(slice)
+            embeddings[idx, :] = out.detach().cpu().numpy().astype(np.float32)
+
+        lag = np.zeros(embeddings.shape)
+        lead = np.zeros(embeddings.shape)
+        lag[1:] = embeddings[1:] - embeddings[:-1]
+        lead[:-1] = embeddings[:-1] - embeddings[1:]
+        embeddings = np.concatenate((embeddings, lag, lead), -1)
+        embeddings = torch.from_numpy(embeddings).unsqueeze(0).to(self.device, dtype=torch.float)
+
+        logits = self.lstm_model(embeddings)
+        logits = logits.view(-1, 6)
+        values = torch.sigmoid(logits).detach().cpu().numpy()
+        return values
+
+    def load_patient(self, patient_images):
+        self.patient_images = patient_images
+        preprocessed_slices = torch.cat([self._preprocess_image(image) for image in self.patient_images])
+        self.patient_predictions = self._run_inference(preprocessed_slices)
+
+    def get_slice_prediction(self, slice_num):
+        if self.patient_predictions is not None:
+            return dict(zip(self.labels, self.patient_predictions[slice_num]))
+        return None
+
+    def predict_image_on_the_fly(self, image):
+        preprocessed_image = self._preprocess_image(image)
+        prediction = self._run_inference(preprocessed_image)
+        return dict(zip(self.labels, prediction[0]))

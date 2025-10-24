@@ -8,3 +8,4 @@ pydicom
 albumentations
 torchvision
 # git+https://github.com/DIDSR/InSilicoICH.git
+gradio
