@@ -14,7 +14,6 @@ import gradio as gr
 
 load_dotenv()
 
-
 hssayeni_dir = Path('/projects01/didsr-aiml/brandon.nelson/pedsilicoICH/datasets/Hssayeni/')
 metadata = pd.read_csv(hssayeni_dir / 'Patient_demographics.csv')
 names = []
@@ -25,106 +24,92 @@ for series_id in metadata['Patient Number']:
         continue
     names.append(int(series_id))
     ages.append(float(metadata[metadata['Patient Number'] == series_id]['Age\n(years)']))
-    files = hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii'
+    files.append(hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii')
 patients = pd.DataFrame(dict(name=names, age=ages, file=files))
-patients
 
-# model_path = Path(os.environ['MODEL_PATH'])
-model_path = Path('/scratch/brandon.nelson/demos/pediatric_ich_cadt/model_files')
+model_path = Path(os.environ.get('MODEL_PATH', '/scratch/brandon.nelson/demos/pediatric_ich_cadt/model_files'))
 if not model_path.exists():
-    download_and_unzip('https://zenodo.org/records/15750437/files/model_files.zip', extract_to=model_path.parents[1]) 
+    download_and_unzip('https://zenodo.org/records/15750437/files/model_files.zip', extract_to=model_path.parent)
 
-# %%
 models = {m.parts[-2]: m for m in sorted(list(model_path.rglob('*.pth')))}
 
-patient = patients.iloc[0]
-images = nib.load(patient['file']).get_fdata().transpose(2, 1, 0)[:, ::-1]
-name = patient['name']
-age = patient['age']
+def get_patient_images(patient_name):
+    patient = patients[patients['name'] == int(patient_name)]
+    if not patient.empty:
+        images = nib.load(patient['file'].iloc[0]).get_fdata().transpose(2, 1, 0)[:, ::-1]
+        return images, patient['age'].iloc[0]
+    return None, None
 
-def ict_pipeline(slice_num, width=5, model_name='CAD_1'):
-    """Processes a slice of a CT scan and predicts the presence of intracranial
-    hemorrhage.
+def update_slice_slider(patient_name):
+    images, _ = get_patient_images(patient_name)
+    if images is not None:
+        max_slices = len(images) - 1
+        return gr.update(maximum=max_slices, value=max_slices // 2)
+    return gr.update(maximum=0, value=0)
 
-    Args:
-        slice_num (int): The starting slice number.
-        width (int, optional): The number of slices to average. Defaults to 5.
-        model_name (str, optional): The name of the model to use for
-            prediction. Defaults to 'CAD_1'.
+def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1'):
+    if not patient_name:
+        return None, None, "<p style='color:black'>Please select a patient.</p>"
 
-    Returns:
-        tuple: A tuple containing the processed image and a dictionary of
-            prediction scores.
-    """
-    image = np.mean(images[slice_num:slice_num+width], axis=0) # create average
+    images, age = get_patient_images(patient_name)
+    if images is None:
+        return None, None, "<p style='color:black'>Patient not found.</p>"
+
+    slice_num = int(slice_num) if slice_num is not None else len(images) // 2
+
+    image = np.mean(images[slice_num:slice_num + width], axis=0)
     out = predict_image(image, models[model_name], device='cuda')
-    return image, out
 
-
-
-def visualize_ict_pipeline(slice_num, width=5, thresh=0.3, model_name='CAD_1', show=True):
-    """Visualizes the output of the ICT pipeline.
-
-    This function runs the ICT pipeline on a given slice and then generates
-    a plot showing the input image, the model's predictions, and the ground
-    truth.
-
-    Args:
-        slice_num (int): The starting slice number.
-        width (int, optional): The number of slices to average. Defaults to 5.
-        thresh (float, optional): The threshold for making a positive
-            prediction. Defaults to 0.3.
-        model_name (str, optional): The name of the model to use for
-            prediction. Defaults to 'CAD_1'.
-        show (bool, optional): Whether to display the plot. Defaults to True.
-
-    Returns:
-        pathlib.Path or None: The path to the saved plot, or None if `show` is
-            True.
-    """
     diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
-    label = diagnosis.loc[(diagnosis.PatientNumber == name) & (diagnosis.SliceNumber == slice_num + 1)].to_numpy()[:, 2:-1]
-    cols = diagnosis.columns[2:-1]
-    subtype = cols[label.argmax()]
+    label_row = diagnosis.loc[(diagnosis.PatientNumber == int(patient_name)) & (diagnosis.SliceNumber == slice_num + 1)]
 
-    image, out = ict_pipeline(slice_num, width, model_name)
+    subtype = 'Normal'
+    if not label_row.empty:
+        label = label_row.to_numpy()[:, 2:-1]
+        cols = diagnosis.columns[2:-1]
+        if label.size > 0:
+            subtype = cols[label.argmax()]
 
-    f, axs = plt.subplots(1, 2, figsize = (10, 4), dpi=150)
-    axs[0].imshow(image, vmin=0, vmax=80, cmap='gray')
-    axs[0].set_axis_off()
-    axs[1].bar(out.keys(), out.values())
-    axs[1].set_ylabel('model output')
-    axs[1].set_ylim([0, 1])
-    axs[1].hlines(thresh, 0, len(out), colors='red')
-    out.pop('Any')
-    max_label = [k for k, v in out.items() if v == max(out.values())][0]
-    predicted_label = max_label if out[max_label] > thresh else 'No_Hemorrhage'
-    color = 'green' if predicted_label == subtype else 'red'
-    axs[0].set_title(f'age: {age}, \nmodel prediction: {predicted_label} | truth: {subtype}', color=color)
-    fname = Path('results.png').absolute()
-    if show:
-        plt.show()
-        return None
-    else:
-        plt.savefig(fname)
-        return fname
+    out_copy = out.copy()
+    out_copy.pop('Any', None)
+    max_label = max(out_copy, key=out_copy.get) if out_copy else 'No_Hemorrhage'
+    predicted_label = max_label if out_copy.get(max_label, 0) > thresh else 'No_Hemorrhage'
 
-# Create the Gradio interface
-iface = gr.Interface(
-    fn=visualize_ict_pipeline,
-    inputs=[
-        gr.Slider(minimum=0, maximum=len(images), step=1, label="Slice Number"),
-        gr.Slider(minimum=1, maximum=10, step=1, label="Width"),
-        gr.Slider(minimum=0, maximum=1, step=0.1, label="Threshold"),
-        gr.Dropdown(choices=list(models.keys()), label="Model Name")
-    ],
-    outputs=["image"]
-)
+    color = "green" if predicted_label == subtype else "red"
+    prediction_text = f"<p style='color:{color}'>age: {age}, <br>model prediction: {predicted_label} | truth: {subtype}</p>"
 
-# Launch the interface
-iface.launch()
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
+    ax.bar(out.keys(), out.values())
+    ax.set_ylabel('model output')
+    ax.set_ylim([0, 1])
+    ax.hlines(thresh, 0, len(out) -1, colors='red')
+    plt.tight_layout()
 
-# %%
+    return image, fig, prediction_text
 
+with gr.Blocks() as demo:
+    with gr.Row():
+        with gr.Column(scale=1):
+            patient_selector = gr.Dropdown(choices=[str(name) for name in patients['name']], label="Patient Number")
+            slice_slider = gr.Slider(minimum=0, maximum=100, step=1, label="Slice Number")
+            width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
+            thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")
+            model_selector = gr.Dropdown(choices=list(models.keys()), label="Model Name", value='CAD_1')
+        with gr.Column(scale=2):
+            image_output = gr.Image(label="CT Slice")
+            prediction_label = gr.HTML(label="Prediction")
+            plot_output = gr.Plot(label="Model Output")
 
+    patient_selector.change(fn=update_slice_slider, inputs=patient_selector, outputs=slice_slider)
 
+    inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector]
+    outputs = [image_output, plot_output, prediction_label]
+
+    patient_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+    slice_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+    width_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+    thresh_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+    model_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+
+if __name__ == "__main__":
+    demo.launch()
