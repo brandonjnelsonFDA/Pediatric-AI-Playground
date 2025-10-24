@@ -31,12 +31,14 @@ if not model_path.exists():
 
 models = {m.parts[-2]: InferenceManager(m) for m in sorted(list(model_path.rglob('*.pth')))}
 
+
 def get_patient_images(patient_name):
     patient = patients[patients['name'] == int(patient_name)]
     if not patient.empty:
         images = nib.load(patient['file'].iloc[0]).get_fdata().transpose(2, 1, 0)[:, ::-1]
         return images, patient['age'].iloc[0]
     return None, None
+
 
 def load_patient_data(patient_name, model_name):
     images, _ = get_patient_images(patient_name)
@@ -45,6 +47,13 @@ def load_patient_data(patient_name, model_name):
         max_slices = len(images) - 1
         return gr.update(maximum=max_slices, value=max_slices // 2)
     return gr.update(maximum=0, value=0)
+
+
+def normalize(img, vmin=None, vmax=None):
+    if vmin is not None:
+        img = np.clip(img, a_min=vmin, a_max=vmax)
+    return (img - img.min()) / (img.max() - img.min())
+
 
 def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1', avg_predictions=True):
     if not patient_name:
@@ -93,6 +102,8 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     ax.hlines(thresh, 0, len(out) -1, colors='red')
     plt.tight_layout()
 
+    image = normalize(image)
+    
     return image, fig, prediction_text
 
 with gr.Blocks() as demo:
