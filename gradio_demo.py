@@ -1,13 +1,11 @@
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from model_utils import download_and_unzip
+from model_utils import download_and_unzip, InferenceManager
 from dotenv import load_dotenv
 import os
 import matplotlib.pyplot as plt
-from model_utils import predict_image
 
-import albumentations as A
 import torch
 import nibabel as nib
 import gradio as gr
@@ -31,7 +29,7 @@ model_path = Path(os.environ.get('MODEL_PATH', '/scratch/brandon.nelson/demos/pe
 if not model_path.exists():
     download_and_unzip('https://zenodo.org/records/15750437/files/model_files.zip', extract_to=model_path.parent)
 
-models = {m.parts[-2]: m for m in sorted(list(model_path.rglob('*.pth')))}
+models = {m.parts[-2]: InferenceManager(m) for m in sorted(list(model_path.rglob('*.pth')))}
 
 def get_patient_images(patient_name):
     patient = patients[patients['name'] == int(patient_name)]
@@ -40,14 +38,15 @@ def get_patient_images(patient_name):
         return images, patient['age'].iloc[0]
     return None, None
 
-def update_slice_slider(patient_name):
+def load_patient_data(patient_name, model_name):
     images, _ = get_patient_images(patient_name)
     if images is not None:
+        models[model_name].load_patient(images)
         max_slices = len(images) - 1
         return gr.update(maximum=max_slices, value=max_slices // 2)
     return gr.update(maximum=0, value=0)
 
-def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1'):
+def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1', avg_predictions=True):
     if not patient_name:
         return None, None, "<p style='color:black'>Please select a patient.</p>"
 
@@ -57,8 +56,17 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
 
     slice_num = int(slice_num) if slice_num is not None else len(images) // 2
 
-    image = np.mean(images[slice_num:slice_num + width], axis=0)
-    out = predict_image(image, models[model_name], device='cuda')
+    if models[model_name].patient_images is None:
+        models[model_name].load_patient(images)
+
+    if avg_predictions:
+        slice_range = range(slice_num, slice_num + width)
+        predictions = [models[model_name].get_slice_prediction(i) for i in slice_range]
+        out = {k: np.mean([p[k] for p in predictions if p is not None]) for k in models[model_name].labels}
+        image = np.mean(images[slice_num:slice_num + width], axis=0)
+    else:
+        image = np.mean(images[slice_num:slice_num + width], axis=0)
+        out = models[model_name].predict_image_on_the_fly(image)
 
     diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
     label_row = diagnosis.loc[(diagnosis.PatientNumber == int(patient_name)) & (diagnosis.SliceNumber == slice_num + 1)]
@@ -95,14 +103,16 @@ with gr.Blocks() as demo:
             width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
             thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")
             model_selector = gr.Dropdown(choices=list(models.keys()), label="Model Name", value='CAD_1')
+            avg_predictions_checkbox = gr.Checkbox(label="Average predictions (faster)", value=True)
         with gr.Column(scale=2):
             image_output = gr.Image(label="CT Slice")
             prediction_label = gr.HTML(label="Prediction")
             plot_output = gr.Plot(label="Model Output")
 
-    patient_selector.change(fn=update_slice_slider, inputs=patient_selector, outputs=slice_slider)
+    patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
+    model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
 
-    inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector]
+    inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox]
     outputs = [image_output, plot_output, prediction_label]
 
     patient_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
@@ -110,6 +120,7 @@ with gr.Blocks() as demo:
     width_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     thresh_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     model_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+    avg_predictions_checkbox.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
 
 if __name__ == "__main__":
     demo.launch()
