@@ -1,11 +1,12 @@
 from pathlib import Path
+import os
+
 import pandas as pd
 import numpy as np
 from model_utils import download_and_unzip, InferenceManager
 from dotenv import load_dotenv
-import os
 import matplotlib.pyplot as plt
-
+from PIL import Image
 import torch
 import nibabel as nib
 import gradio as gr
@@ -108,7 +109,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     vmax = level + window //2
     image = normalize(image, vmin=vmin, vmax=vmax)
     image = (255*normalize(image, vmin=vmin, vmax=vmax)).astype(np.int8)
-    image = PIL.Image.fromarray(image, 'L')
+    image = Image.fromarray(image, 'L')
     return image, fig, prediction_text
 
 with gr.Blocks() as demo:

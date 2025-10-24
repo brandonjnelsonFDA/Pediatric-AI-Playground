@@ -7,4 +7,5 @@ dotenv
 pydicom
 albumentations
 torchvision
+gradio
 git+https://github.com/DIDSR/InSilicoICH.git
