@@ -19,7 +19,19 @@ from VITools.phantom import resize
 
 
 def apply_window(image, center, width):
-    '''taken directly from https://github.com/darraghdog/rsna'''
+    """Applies a windowing function to a grayscale image.
+
+    This function is commonly used in medical imaging to adjust the contrast
+    and brightness of an image to highlight specific structures.
+
+    Args:
+        image (np.ndarray): The input image as a NumPy array.
+        center (int): The center of the window.
+        width (int): The width of the window.
+
+    Returns:
+        np.ndarray: The windowed image.
+    """
     image = image.copy()
     min_value = center - width // 2
     max_value = center + width // 2
@@ -29,7 +41,19 @@ def apply_window(image, center, width):
 
 
 def apply_window_policy(image):
-    '''taken directly from https://github.com/darraghdog/rsna'''
+    """Applies a multi-windowing policy to the image.
+
+    This function applies three different windowing functions to the input
+    image to highlight brain, subdural, and bone structures, respectively.
+    The windowed images are then normalized and stacked to form a 3-channel
+    image.
+
+    Args:
+        image (np.ndarray): The input image as a NumPy array.
+
+    Returns:
+        np.ndarray: The 3-channel image with the windowing policy applied.
+    """
     image1 = apply_window(image, 40, 80) # brain
     image2 = apply_window(image, 80, 200) # subdural
     image3 = apply_window(image, 40, 380) # bone
@@ -45,9 +69,24 @@ def apply_window_policy(image):
 
 
 def classify_images(volume, options, model_path, device):
-    """Receive input volume of dimensions [num_images, 3, 480, 480] and
-    performs classification with pre-trained models"""
+    """Performs classification on a volume of images using a pre-trained model.
 
+    This function takes a volume of images, extracts features using a
+    pre-trained classifier, and then uses a recurrent neural network (RNN) to
+    make a final classification.
+
+    Args:
+        volume (torch.Tensor): A tensor representing the volume of images, with
+            dimensions [num_images, 3, 480, 480].
+        options (dict): A dictionary of options. The 'verbose' key can be set
+            to True to enable verbose output.
+        model_path (str): The path to the pre-trained model file.
+        device (str): The device to run the model on (e.g., 'cuda' or 'cpu').
+
+    Returns:
+        np.ndarray: A NumPy array of classification scores for each image in the
+            volume.
+    """
     num_images = volume.shape[0]
     if options['verbose']: print('Starting classification')
 
@@ -63,10 +102,24 @@ def classify_images(volume, options, model_path, device):
     classifier_model.load_state_dict(torch.load(next(model_path.parent.glob('model_*.bin')),  map_location=device)) # Load weights
 
     class Identity(nn.Module):
+        """An identity layer that returns its input.
+
+        This layer is used as a placeholder to replace the fully connected
+        layer of a pre-trained model, allowing for the extraction of features
+        from the penultimate layer.
+        """
         def __init__(self):
             super(Identity, self).__init__()
   
         def forward(self, x):
+            """Returns the input tensor unchanged.
+
+            Args:
+                x (torch.Tensor): The input tensor.
+
+            Returns:
+                torch.Tensor: The output tensor, identical to the input.
+            """
             return x
 
     # Extract embedding layers since that's what we need for the LSTM
@@ -88,7 +141,21 @@ def classify_images(volume, options, model_path, device):
 
     # INITIALIZE CLASSES FOR LSTM MODEL
     class SpatialDropout(nn.Dropout2d):
+        """Applies spatial dropout to a 2D tensor.
+
+        This layer randomly sets entire feature maps to zero, which helps to
+        prevent overfitting by encouraging the model to learn more robust
+        features.
+        """
         def forward(self, x):
+            """Applies spatial dropout to the input tensor.
+
+            Args:
+                x (torch.Tensor): The input tensor.
+
+            Returns:
+                torch.Tensor: The output tensor with spatial dropout applied.
+            """
             x = x.unsqueeze(2)    # (N, T, 1, K)
             x = x.permute(0, 3, 2, 1)  # (N, K, 1, T)
             x = super(SpatialDropout, self).forward(x)  # (N, K, 1, T), some features are masked
@@ -97,6 +164,12 @@ def classify_images(volume, options, model_path, device):
             return x
 
     class NeuralNet(nn.Module):
+        """A neural network model for classification.
+
+        This model consists of two bidirectional LSTM layers followed by two
+        linear layers. It is designed to take a sequence of embeddings as
+        input and output a sequence of classification scores.
+        """
         def __init__(self, embed_size=2048*3, LSTM_UNITS=64, DO = 0.3):
             super(NeuralNet, self).__init__()
 
@@ -111,6 +184,18 @@ def classify_images(volume, options, model_path, device):
             self.linear = nn.Linear(LSTM_UNITS*2, 6)
 
         def forward(self, x, lengths=None):
+            """Performs a forward pass through the network.
+
+            Args:
+                x (torch.Tensor): The input tensor, which is a sequence of
+                    embeddings.
+                lengths (list, optional): A list of sequence lengths. Defaults
+                    to None.
+
+            Returns:
+                torch.Tensor: The output tensor, which is a sequence of
+                    classification scores.
+            """
             h_embedding = x
 
             h_embadd = torch.cat((h_embedding[:,:,:2048], h_embedding[:,:,:2048]), -1)
@@ -158,6 +243,21 @@ def classify_images(volume, options, model_path, device):
 
 
 def predict_image(image, model, device='cuda'):
+    """Predicts the classification of a single image.
+
+    This function takes a single image, applies the necessary preprocessing
+    steps, and then uses the `classify_images` function to obtain a
+    classification.
+
+    Args:
+        image (np.ndarray): The input image as a NumPy array.
+        model (str): The name of the model to use for classification.
+        device (str, optional): The device to run the model on. Defaults to
+            'cuda'.
+
+    Returns:
+        dict: A dictionary mapping class labels to their predicted scores.
+    """
     # image preparation lifted from prepare_images (intended for .dcm and .nii)
     labels = ['EDH', 'IPH', 'IVH', 'SAH', 'SDH', 'Any']
     mean_img = [0.22363983, 0.18190407, 0.2523437 ]

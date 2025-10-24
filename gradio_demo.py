@@ -43,7 +43,19 @@ name = patient['name']
 age = patient['age']
 
 def ict_pipeline(slice_num, width=5, model_name='CAD_1'):
+    """Processes a slice of a CT scan and predicts the presence of intracranial
+    hemorrhage.
 
+    Args:
+        slice_num (int): The starting slice number.
+        width (int, optional): The number of slices to average. Defaults to 5.
+        model_name (str, optional): The name of the model to use for
+            prediction. Defaults to 'CAD_1'.
+
+    Returns:
+        tuple: A tuple containing the processed image and a dictionary of
+            prediction scores.
+    """
     image = np.mean(images[slice_num:slice_num+width], axis=0) # create average
     out = predict_image(image, models[model_name], device='cuda')
     return image, out
@@ -51,12 +63,31 @@ def ict_pipeline(slice_num, width=5, model_name='CAD_1'):
 
 
 def visualize_ict_pipeline(slice_num, width=5, thresh=0.3, model_name='CAD_1', show=True):
+    """Visualizes the output of the ICT pipeline.
+
+    This function runs the ICT pipeline on a given slice and then generates
+    a plot showing the input image, the model's predictions, and the ground
+    truth.
+
+    Args:
+        slice_num (int): The starting slice number.
+        width (int, optional): The number of slices to average. Defaults to 5.
+        thresh (float, optional): The threshold for making a positive
+            prediction. Defaults to 0.3.
+        model_name (str, optional): The name of the model to use for
+            prediction. Defaults to 'CAD_1'.
+        show (bool, optional): Whether to display the plot. Defaults to True.
+
+    Returns:
+        pathlib.Path or None: The path to the saved plot, or None if `show` is
+            True.
+    """
     diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
     label = diagnosis.loc[(diagnosis.PatientNumber == name) & (diagnosis.SliceNumber == slice_num + 1)].to_numpy()[:, 2:-1]
     cols = diagnosis.columns[2:-1]
     subtype = cols[label.argmax()]
 
-    image, out = ict_pipeline(start)
+    image, out = ict_pipeline(slice_num, width, model_name)
 
     f, axs = plt.subplots(1, 2, figsize = (10, 4), dpi=150)
     axs[0].imshow(image, vmin=0, vmax=80, cmap='gray')
