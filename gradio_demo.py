@@ -56,7 +56,7 @@ def visualize_ict_pipeline(slice_num, width=5, thresh=0.3, model_name='CAD_1', s
     cols = diagnosis.columns[2:-1]
     subtype = cols[label.argmax()]
 
-    image, out = ict_pipeline(start)
+    image, out = ict_pipeline(slice_num, width, model_name)
 
     f, axs = plt.subplots(1, 2, figsize = (10, 4), dpi=150)
     axs[0].imshow(image, vmin=0, vmax=80, cmap='gray')
