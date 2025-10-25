@@ -121,17 +121,18 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     prediction_text = f"<p style='color:{color}'>age: {age}, <br>model prediction: {predicted_label} | truth: {subtype}</p>"
 
     fig, axs = plt.subplots(1, 2, figsize=(10, 4), dpi=150)
-    axs[0].bar(out.keys(), out.values())
-    axs[0].set_ylabel('model output')
-    axs[0].set_ylim([0, 1])
-    axs[0].tick_params(axis='x', labelrotation=45)
-    axs[0].hlines(thresh, 0, len(out) -1, colors='red')
-
     window, level = display_settings[display_setting]
     vmin = level - window // 2
     vmax = level + window //2
-    axs[1].imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
-    axs[1].set_axis_off()
+    axs[0].imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
+    axs[0].set_axis_off()
+
+    axs[1].bar(out.keys(), out.values())
+    axs[1].set_ylabel('model output')
+    axs[1].set_ylim([0, 1])
+    axs[1].tick_params(axis='x', labelrotation=45)
+    axs[1].hlines(thresh, 0, len(out) -1, colors='red')
+
     return fig, prediction_text
 
 
