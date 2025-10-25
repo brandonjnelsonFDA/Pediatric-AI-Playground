@@ -318,7 +318,7 @@ def predict_image(image, model, device='cuda'):
         dict: A dictionary mapping class labels to their predicted scores.
     """
     # image preparation lifted from prepare_images (intended for .dcm and .nii)
-    labels = ['EDH', 'IPH', 'IVH', 'SAH', 'SDH', 'Any']
+    labels = ['Epidural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid', 'Subdural', 'Any']
     mean_img = [0.22363983, 0.18190407, 0.2523437 ]
     std_img = [0.32451536, 0.2956294,  0.31335256]
     transform = A.Normalize(mean=mean_img, std=std_img, max_pixel_value=255.0, p=1.0)
@@ -375,7 +375,7 @@ class InferenceManager:
     def __init__(self, model_path, device='cuda'):
         self.model_path = Path(model_path)
         self.device = device
-        self.labels = ['EDH', 'IPH', 'IVH', 'SAH', 'SDH', 'Any']
+        self.labels = ['Epidural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid', 'Subdural', 'Any']
         mean_img = [0.22363983, 0.18190407, 0.2523437]
         std_img = [0.32451536, 0.2956294, 0.31335256]
         self.transform = A.Normalize(mean=mean_img, std=std_img, max_pixel_value=255.0, p=1.0)

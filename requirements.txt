@@ -7,5 +7,6 @@ dotenv
 pydicom
 albumentations
 torchvision
+monai
 # git+https://github.com/DIDSR/InSilicoICH.git
 gradio
