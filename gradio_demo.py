@@ -118,9 +118,10 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     predicted_label = max_label if out_copy.get(max_label, 0) > thresh else 'No_Hemorrhage'
 
     color = "green" if predicted_label == subtype else "red"
-    prediction_text = f"<p style='color:{color}'>age: {age}, <br>model prediction: {predicted_label} | truth: {subtype}</p>"
+    prediction_text = f"age: {age}, model prediction: {predicted_label} | truth: {subtype}"
 
     fig, axs = plt.subplots(1, 2, figsize=(10, 5), dpi=150)
+    fig.suptitle(prediction_text, color=color)
     window, level = display_settings[display_setting]
     vmin = level - window // 2
     vmax = level + window //2
@@ -133,7 +134,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     axs[1].tick_params(axis='x', labelrotation=45)
     axs[1].hlines(thresh, 0, len(out) -1, colors='red')
 
-    return fig, prediction_text
+    return fig
 
 
 def update_patient_dropdown(min_age, max_age):
@@ -157,7 +158,6 @@ with gr.Blocks() as demo:
         with gr.Column(scale=2):
             image_output = gr.Plot(label="CT Slice")
             display_settings_selector = gr.Dropdown(choices=list(display_settings.keys()), label="Display Settings", value='brain')
-            prediction_label = gr.HTML(label="Prediction")
 
     patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
     model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
@@ -165,7 +165,7 @@ with gr.Blocks() as demo:
     max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
 
     inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox, display_settings_selector]
-    outputs = [image_output, prediction_label]
+    outputs = [image_output]
 
     patient_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     slice_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
