@@ -128,11 +128,29 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     axs[0].imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
     axs[0].set_axis_off()
 
-    axs[1].bar(out.keys(), out.values())
+    keys = list(out.keys())
+    values = list(out.values())
+    bar_colors = []
+    for key, value in out.items():
+        # True Positive
+        if value > thresh and key == subtype:
+            bar_colors.append('green')
+        # False Positive
+        elif value > thresh and key != subtype:
+            bar_colors.append('red')
+        # False Negative
+        elif value <= thresh and key == subtype:
+            bar_colors.append('red')
+        # True Negative
+        else:
+            bar_colors.append('blue')
+
+    axs[1].bar(keys, values, color=bar_colors)
     axs[1].set_ylabel('model output')
     axs[1].set_ylim([0, 1])
     axs[1].tick_params(axis='x', labelrotation=45)
     axs[1].hlines(thresh, 0, len(out) -1, colors='red')
+    axs[1].text(len(out) - 1, thresh + 0.01, 'detection threshold', ha='right', va='bottom', fontsize='small', color='gray')
     plt.tight_layout()
 
     return fig
