@@ -38,6 +38,14 @@ if not model_path.exists():
 
 models = {m.parts[-2]: InferenceManager(m) for m in sorted(list(model_path.rglob('*.pth')))}
 
+display_settings = {
+    'brain': (80, 40),
+    'subdural': (300, 100),
+    'stroke': (40, 40),
+    'temporal bones': (2800, 600),
+    'soft tissues': (400, 50),
+}
+
 
 def get_patient_number_from_dropdown(patient_string):
     if not patient_string:
@@ -71,7 +79,7 @@ def normalize(img, vmin=None, vmax=None):
     return (img - img.min()) / (img.max() - img.min())
 
 
-def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1', avg_predictions=True):
+def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1', avg_predictions=True, display_setting='brain'):
     if not patient_name:
         return None, None, "<p style='color:black'>Please select a patient.</p>"
 
@@ -120,8 +128,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     ax.hlines(thresh, 0, len(out) -1, colors='red')
     plt.tight_layout()
 
-    window = 300
-    level = 150
+    window, level = display_settings[display_setting]
     vmin = level - window // 2
     vmax = level + window //2
     fig_image, ax2 = plt.subplots(figsize=(6, 4), dpi=150)
@@ -151,6 +158,7 @@ with gr.Blocks() as demo:
             avg_predictions_checkbox = gr.Checkbox(label="Average predictions (faster)", value=True)
         with gr.Column(scale=2):
             image_output = gr.Plot(label="CT Slice")
+            display_settings_selector = gr.Dropdown(choices=list(display_settings.keys()), label="Display Settings", value='brain')
             prediction_label = gr.HTML(label="Prediction")
             plot_output = gr.Plot(label="Model Output")
 
@@ -159,7 +167,7 @@ with gr.Blocks() as demo:
     min_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
     max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
 
-    inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox]
+    inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox, display_settings_selector]
     outputs = [image_output, plot_output, prediction_label]
 
     patient_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
@@ -168,6 +176,7 @@ with gr.Blocks() as demo:
     thresh_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     model_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     avg_predictions_checkbox.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+    display_settings_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
 
 if __name__ == "__main__":
     demo.launch()
