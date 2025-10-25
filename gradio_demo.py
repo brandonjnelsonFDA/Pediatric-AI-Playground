@@ -120,7 +120,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     color = "green" if predicted_label == subtype else "red"
     prediction_text = f"<p style='color:{color}'>age: {age}, <br>model prediction: {predicted_label} | truth: {subtype}</p>"
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 4), dpi=150)
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5), dpi=150)
     window, level = display_settings[display_setting]
     vmin = level - window // 2
     vmax = level + window //2
