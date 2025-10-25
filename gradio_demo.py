@@ -99,6 +99,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     ax.bar(out.keys(), out.values())
     ax.set_ylabel('model output')
     ax.set_ylim([0, 1])
+    ax.tick_params(axis='x', labelrotation=45)
     ax.hlines(thresh, 0, len(out) -1, colors='red')
     plt.tight_layout()
 
