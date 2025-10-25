@@ -124,11 +124,11 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     level = 150
     vmin = level - window // 2
     vmax = level + window //2
-    fig_image, ax = plt.subplots(dpi=150)
-    ax.imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
-    ax.set_axis_off()
+    fig_image, ax2 = plt.subplots(figsize=(6, 4), dpi=150)
+    ax2.imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
+    ax2.set_axis_off()
     # image = normalize(image, vmin=vmin, vmax=vmax)
-    return image, fig, prediction_text
+    return fig_image, fig, prediction_text
 
 
 def update_patient_dropdown(min_age, max_age):
