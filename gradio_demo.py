@@ -120,22 +120,19 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     color = "green" if predicted_label == subtype else "red"
     prediction_text = f"<p style='color:{color}'>age: {age}, <br>model prediction: {predicted_label} | truth: {subtype}</p>"
 
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-    ax.bar(out.keys(), out.values())
-    ax.set_ylabel('model output')
-    ax.set_ylim([0, 1])
-    ax.tick_params(axis='x', labelrotation=45)
-    ax.hlines(thresh, 0, len(out) -1, colors='red')
-    plt.tight_layout()
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4), dpi=150)
+    axs[0].bar(out.keys(), out.values())
+    axs[0].set_ylabel('model output')
+    axs[0].set_ylim([0, 1])
+    axs[0].tick_params(axis='x', labelrotation=45)
+    axs[0].hlines(thresh, 0, len(out) -1, colors='red')
 
     window, level = display_settings[display_setting]
     vmin = level - window // 2
     vmax = level + window //2
-    fig_image, ax2 = plt.subplots(figsize=(6, 4), dpi=150)
-    ax2.imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
-    ax2.set_axis_off()
-    # image = normalize(image, vmin=vmin, vmax=vmax)
-    return fig_image, fig, prediction_text
+    axs[1].imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
+    axs[1].set_axis_off()
+    return fig, prediction_text
 
 
 def update_patient_dropdown(min_age, max_age):
@@ -160,7 +157,6 @@ with gr.Blocks() as demo:
             image_output = gr.Plot(label="CT Slice")
             display_settings_selector = gr.Dropdown(choices=list(display_settings.keys()), label="Display Settings", value='brain')
             prediction_label = gr.HTML(label="Prediction")
-            plot_output = gr.Plot(label="Model Output")
 
     patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
     model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
@@ -168,7 +164,7 @@ with gr.Blocks() as demo:
     max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
 
     inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox, display_settings_selector]
-    outputs = [image_output, plot_output, prediction_label]
+    outputs = [image_output, prediction_label]
 
     patient_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     slice_slider.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
