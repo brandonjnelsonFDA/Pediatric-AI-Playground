@@ -16,12 +16,20 @@ metadata = pd.read_csv(hssayeni_dir / 'Patient_demographics.csv')
 names = []
 ages = []
 files = []
-for series_id in metadata['Patient Number']:
-    if np.isnan(series_id):
+for _, row in metadata.iterrows():
+    series_id = row['Patient Number']
+    age = row['Age\n(years)']
+
+    if pd.isna(series_id) or pd.isna(age):
         continue
+
+    file_path = hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii'
+    if not file_path.exists():
+        continue
+
     names.append(int(series_id))
-    ages.append(float(metadata[metadata['Patient Number'] == series_id]['Age\n(years)']))
-    files.append(hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii')
+    ages.append(float(age))
+    files.append(file_path)
 patients = pd.DataFrame(dict(name=names, age=ages, file=files))
 
 model_path = Path(os.environ.get('MODEL_PATH', '/scratch/brandon.nelson/demos/pediatric_ich_cadt/model_files'))
@@ -31,8 +39,17 @@ if not model_path.exists():
 models = {m.parts[-2]: InferenceManager(m) for m in sorted(list(model_path.rglob('*.pth')))}
 
 
+def get_patient_number_from_dropdown(patient_string):
+    if not patient_string:
+        return None
+    return int(patient_string.split(' ')[1])
+
+
 def get_patient_images(patient_name):
-    patient = patients[patients['name'] == int(patient_name)]
+    patient_number = get_patient_number_from_dropdown(patient_name)
+    if patient_number is None:
+        return None, None
+    patient = patients[patients['name'] == patient_number]
     if not patient.empty:
         images = nib.load(patient['file'].iloc[0]).get_fdata().transpose(2, 1, 0)[:, ::-1]
         return images, patient['age'].iloc[0]
@@ -77,7 +94,8 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
         out = models[model_name].predict_image_on_the_fly(image)
 
     diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
-    label_row = diagnosis.loc[(diagnosis.PatientNumber == int(patient_name)) & (diagnosis.SliceNumber == slice_num + 1)]
+    patient_number = get_patient_number_from_dropdown(patient_name)
+    label_row = diagnosis.loc[(diagnosis.PatientNumber == patient_number) & (diagnosis.SliceNumber == slice_num + 1)]
 
     subtype = 'Normal'
     if not label_row.empty:
@@ -109,10 +127,20 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     image = normalize(image, vmin=vmin, vmax=vmax)
     return image, fig, prediction_text
 
+
+def update_patient_dropdown(min_age, max_age):
+    filtered_patients = patients[(patients['age'] >= min_age) & (patients['age'] <= max_age)]
+    choices = [f"Patient {name} - Age {age}" for name, age in zip(filtered_patients['name'], filtered_patients['age'])]
+    return gr.update(choices=choices)
+
+
 with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column(scale=1):
-            patient_selector = gr.Dropdown(choices=[str(name) for name in patients['name']], label="Patient Number")
+            with gr.Row():
+                min_age_input = gr.Number(label="Min Age", value=0)
+                max_age_input = gr.Number(label="Max Age", value=99)
+            patient_selector = gr.Dropdown(choices=[f"Patient {name} - Age {age}" for name, age in zip(patients['name'], patients['age'])], label="Patient Number")
             slice_slider = gr.Slider(minimum=0, maximum=100, step=1, label="Slice Number")
             width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
             thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")
@@ -125,6 +153,8 @@ with gr.Blocks() as demo:
 
     patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
     model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
+    min_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
+    max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
 
     inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox]
     outputs = [image_output, plot_output, prediction_label]
