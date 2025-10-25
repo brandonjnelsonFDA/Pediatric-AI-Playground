@@ -1,4 +1,3 @@
-import sys
 import os
 from pathlib import Path
 import requests
@@ -6,7 +5,6 @@ import zipfile
 import io
 
 import albumentations as A
-# import cv2
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -147,6 +145,7 @@ def classify_images(volume, options, model_path, device):
         np.ndarray: A NumPy array of classification scores for each image in the
             volume.
     """
+    print(options)
     num_images = volume.shape[0]
     if options['verbose']: print('Starting classification')
 
@@ -335,7 +334,7 @@ def predict_image(image, model, device='cuda'):
 
 
     # classify images
-    options = {'verbose': False}
+    options = {'verbose': True}
     output = classify_images(image, options, model, device=device)
     return dict(zip(labels, output[0]))
 

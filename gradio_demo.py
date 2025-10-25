@@ -7,13 +7,12 @@ from model_utils import download_and_unzip, InferenceManager
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 from PIL import Image
-import torch
 import nibabel as nib
 import gradio as gr
 
 load_dotenv()
 
-hssayeni_dir = Path('/projects01/didsr-aiml/brandon.nelson/pedsilicoICH/datasets/Hssayeni/')
+hssayeni_dir = Path(os.environ['HSSAYENI_DIR'])
 metadata = pd.read_csv(hssayeni_dir / 'Patient_demographics.csv')
 names = []
 ages = []
@@ -28,7 +27,7 @@ patients = pd.DataFrame(dict(name=names, age=ages, file=files))
 
 model_path = Path(os.environ.get('MODEL_PATH', '/scratch/brandon.nelson/demos/pediatric_ich_cadt/model_files'))
 if not model_path.exists():
-    download_and_unzip('https://zenodo.org/records/15750437/files/model_files.zip', extract_to=model_path.parent)
+    download_and_unzip('https://zenodo.org/records/15750437/files/model_files.zip', extract_to=model_path)
 
 models = {m.parts[-2]: InferenceManager(m) for m in sorted(list(model_path.rglob('*.pth')))}
 
