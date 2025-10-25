@@ -14,8 +14,33 @@ import numpy as np
 import pydicom
 import nibabel as nib
 import skimage
-from skimage.transform import resize
+from monai.transforms import Resize
 
+
+def resize(phantom: np.ndarray, shape: tuple, **kwargs) -> np.ndarray:
+    """Resizes a phantom to a new shape while maintaining aspect ratio.
+
+    This function uses MONAI's Resize transform to resize a 2D or 3D phantom
+    array. The `size_mode='longest'` option scales the longest dimension to
+    match the corresponding dimension in `shape`, and scales other dimensions
+    proportionally.
+
+    mode = 'nearest' is useful for downsizing without interpolation errors
+
+    Args:
+        phantom (np.ndarray): The phantom image array to resize.
+        shape (tuple): The target shape for the phantom.
+        **kwargs: Additional keyword arguments to be passed to
+            `monai.transforms.Resize`. 
+            E.g.: `from monai.transforms import Resize; Resize?`
+
+    Returns:
+        np.ndarray: The resized phantom array.
+    """
+    resize_transform = Resize(max(shape), size_mode='longest', **kwargs)
+    # MONAI transforms expect a channel dimension, so we add and remove one.
+    resized = resize_transform(phantom[None])[0]
+    return resized
 
 class Identity(nn.Module):
     def __init__(self):
@@ -303,7 +328,7 @@ def predict_image(image, model, device='cuda'):
     image -= image.min((0,1))
     image = (255*image).astype(np.uint8)
     #cv2.imwrite('test.jpg', image)
-    image = resize(image, (480, 480)) # use Monai instead or VITools.resize
+    image = resize(image, (480, 480)) # use Monai instead or VITools.resize # skimage.transform.resize changes result!!
     result = transform(image=image)
     image = torch.from_numpy(result["image"])
     image = torch.permute(image, (2, 1, 0)).unsqueeze(0)
