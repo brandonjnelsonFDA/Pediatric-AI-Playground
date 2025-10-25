@@ -108,8 +108,8 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     vmin = level - window // 2
     vmax = level + window //2
     image = normalize(image, vmin=vmin, vmax=vmax)
-    image = (255*normalize(image, vmin=vmin, vmax=vmax)).astype(np.int8)
-    image = Image.fromarray(image, 'L')
+    # image = (255*image).astype(np.int8)
+    # image = Image.fromarray(image, 'L')
     return image, fig, prediction_text
 
 with gr.Blocks() as demo:
