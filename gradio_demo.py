@@ -124,7 +124,10 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     level = 150
     vmin = level - window // 2
     vmax = level + window //2
-    image = normalize(image, vmin=vmin, vmax=vmax)
+    fig_image, ax = plt.subplots(dpi=150)
+    ax.imshow(image, vmin=vmin, vmax=vmax, cmap='gray')
+    ax.set_axis_off()
+    # image = normalize(image, vmin=vmin, vmax=vmax)
     return image, fig, prediction_text
 
 
@@ -147,7 +150,7 @@ with gr.Blocks() as demo:
             model_selector = gr.Dropdown(choices=list(models.keys()), label="Model Name", value='CAD_1')
             avg_predictions_checkbox = gr.Checkbox(label="Average predictions (faster)", value=True)
         with gr.Column(scale=2):
-            image_output = gr.Image(label="CT Slice")
+            image_output = gr.Plot(label="CT Slice")
             prediction_label = gr.HTML(label="Prediction")
             plot_output = gr.Plot(label="Model Output")
 
