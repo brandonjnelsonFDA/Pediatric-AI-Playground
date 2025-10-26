@@ -132,18 +132,33 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     values = list(out.values())
     bar_colors = []
     for key, value in out.items():
-        # True Positive
-        if value > thresh and key == subtype:
-            bar_colors.append('green')
-        # False Positive
-        elif value > thresh and key != subtype:
-            bar_colors.append('red')
-        # False Negative
-        elif value <= thresh and key == subtype:
-            bar_colors.append('red')
-        # True Negative
+        if key == 'Any':
+            # "Any" label logic
+            is_hemorrhage_present = subtype != 'Normal'
+            is_prediction_positive = value > thresh
+
+            if is_prediction_positive and is_hemorrhage_present:
+                bar_colors.append('green')  # True Positive
+            elif not is_prediction_positive and is_hemorrhage_present:
+                bar_colors.append('red')  # False Negative
+            elif is_prediction_positive and not is_hemorrhage_present:
+                bar_colors.append('red')  # False Positive
+            else:
+                bar_colors.append('blue')  # True Negative
         else:
-            bar_colors.append('blue')
+            # Original logic for other subtypes
+            # True Positive
+            if value > thresh and key == subtype:
+                bar_colors.append('green')
+            # False Positive
+            elif value > thresh and key != subtype:
+                bar_colors.append('red')
+            # False Negative
+            elif value <= thresh and key == subtype:
+                bar_colors.append('red')
+            # True Negative
+            else:
+                bar_colors.append('blue')
 
     axs[1].bar(keys, values, color=bar_colors)
     axs[1].set_ylabel('model output')
