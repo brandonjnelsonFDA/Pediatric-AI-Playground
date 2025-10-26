@@ -105,7 +105,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     patient_number = get_patient_number_from_dropdown(patient_name)
     label_row = diagnosis.loc[(diagnosis.PatientNumber == patient_number) & (diagnosis.SliceNumber == slice_num + 1)]
 
-    subtype = 'Normal'
+    subtype = 'No_Hemorrhage'
     if not label_row.empty:
         label = label_row.to_numpy()[:, 2:-1]
         cols = diagnosis.columns[2:-1]
@@ -134,7 +134,7 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     for key, value in out.items():
         if key == 'Any':
             # "Any" label logic
-            is_hemorrhage_present = subtype != 'Normal'
+            is_hemorrhage_present = subtype != 'No_Hemorrhage'
             is_prediction_positive = value > thresh
 
             if is_prediction_positive and is_hemorrhage_present:
