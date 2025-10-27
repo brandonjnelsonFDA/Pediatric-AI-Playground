@@ -2,11 +2,13 @@
 
 This repository contains a demo of the methods described in the paper: **A Knowledge-Based Framework for Generating Synthetic Intracranial Hemorrhage CT Data to Assess AI Generalizability** [preprint link](https://zenodo.org/records/15691337).
 
+![](Peds_AI_Playground.png)
+
 ## Setup
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-repo/synthetic-ich-demo.git
+    git clone https://github.com/brandonjnelsonFDA/Pediatric-AI-Playground.git
     cd synthetic-ich-demo
     ```
 2.  **Install dependencies:**
