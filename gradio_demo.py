@@ -78,6 +78,7 @@ def normalize(img, vmin=None, vmax=None):
         img = np.clip(img, a_min=vmin, a_max=vmax)
     return (img - img.min()) / (img.max() - img.min())
 
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
 def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_name='CAD_1', avg_predictions=True, display_setting='brain'):
     if not patient_name:
@@ -120,7 +121,6 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     color = "green" if predicted_label == subtype else "red"
     prediction_text = f"age: {age}, model prediction: {predicted_label} | truth: {subtype}"
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
     fig.suptitle(prediction_text, color=color)
     window, level = display_settings[display_setting]
     vmin = level - window // 2
@@ -210,4 +210,4 @@ with gr.Blocks() as demo:
     display_settings_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(default_concurrency_limit=3)
