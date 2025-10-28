@@ -11,26 +11,70 @@ import gradio as gr
 
 load_dotenv()
 
+
+def load_hssayeni_data(hssayeni_dir):
+    hssayeni_dir = Path(hssayeni_dir)
+    metadata = pd.read_csv(hssayeni_dir / 'Patient_demographics.csv')
+    diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
+    rows = []
+    for idx, row in diagnosis.iterrows():
+        series_id = row.PatientNumber
+        if np.isnan(series_id):
+            continue
+        row['name'] = int(series_id)
+        row['age'] = float(metadata[metadata['Patient Number'] == series_id]['Age\n(years)'].iloc[0])
+        row['file'] = hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii'
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def load_synthetic_data(synth_dir):
+    synth_dir = Path(synth_dir)
+    results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
+
+    synth_labels_to_real = {
+        'EDH': 'Epidural',
+        'SDH': 'Subdural',
+        'IPH': 'Intraparenchymal',
+        'IVH': 'Intraventricular',
+        'SAH': 'Subarachnoid'
+    }
+
+    diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, None))).astype(float)
+    names = []
+    ages = []
+    files = []
+
+    rows = []
+    for idx, row in results.iterrows():
+        name = row.case_id
+        row['name'] = f'synthetic {int(name.split('_')[-1])}'
+        row['age'] = float(results.loc[results.case_id == name]['phantom'].iloc[0].split(' yr')[0])
+        row['file'] = synth_dir / name / 'dicoms'
+        row = pd.concat([row, diagnosis.iloc[idx]])
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def load_datasets(hssayeni_dir=None, synth_dir=None, outfile='dataset.csv'):
+    outfile = Path(outfile)
+    if outfile.exists():
+        return pd.read_csv(outfile)
+    hssayeni_patients = load_hssayeni_data(hssayeni_dir) if hssayeni_dir else []
+    synth_patients = load_synthetic_data(synth_dir) if synth_dir else []
+
+    patients = []
+    for dataset, name in zip([hssayeni_patients, synth_patients], ['Hssayeni', 'Synthetic']):
+        dataset['dataset'] = name
+        patients.append(dataset)
+    patients = pd.concat(patients, ignore_index=True)[['name', 'age', *synth_labels_to_real.values(), 'file']]
+    patients.fillna(0.0, inplace=True)
+    patients.to_csv(outfile, index=False)
+    return patients
+
 hssayeni_dir = Path(os.environ['HSSAYENI_DIR'])
-metadata = pd.read_csv(hssayeni_dir / 'Patient_demographics.csv')
-names = []
-ages = []
-files = []
-for _, row in metadata.iterrows():
-    series_id = row['Patient Number']
-    age = row['Age\n(years)']
-
-    if pd.isna(series_id) or pd.isna(age):
-        continue
-
-    file_path = hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii'
-    if not file_path.exists():
-        continue
-
-    names.append(int(series_id))
-    ages.append(float(age))
-    files.append(file_path)
-patients = pd.DataFrame(dict(name=names, age=ages, file=files))
+synth_dir = Path(os.environ['SYNTH_DIR'])
+patients = load_datasets(hssayeni_dir, synth_dir)
 
 model_path = Path(os.environ.get('MODEL_PATH', '/scratch/brandon.nelson/demos/pediatric_ich_cadt/model_files'))
 if not model_path.exists():
