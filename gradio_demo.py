@@ -210,4 +210,4 @@ with gr.Blocks() as demo:
     display_settings_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
 
 if __name__ == "__main__":
-    demo.launch(default_concurrency_limit=3)
+    demo.launch()
