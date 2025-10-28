@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import nibabel as nib
 import gradio as gr
+import SimpleITK as sitk
 
 load_dotenv()
 
@@ -91,19 +92,27 @@ display_settings = {
 }
 
 
-def get_patient_number_from_dropdown(patient_string):
+def get_patient_name_from_dropdown(patient_string):
     if not patient_string:
         return None
-    return int(patient_string.split(' ')[1])
+    parts = patient_string.split(' ')
+    if parts[1] == 'synthetic':
+        return f"synthetic {parts[2]}"
+    else:
+        return int(parts[1])
 
 
 def get_patient_images(patient_name):
-    patient_number = get_patient_number_from_dropdown(patient_name)
-    if patient_number is None:
+    patient_identifier = get_patient_name_from_dropdown(patient_name)
+    if patient_identifier is None:
         return None, None
-    patient = patients[patients['name'] == patient_number]
+    patient = patients[patients['name'] == patient_identifier]
     if not patient.empty:
-        images = nib.load(patient['file'].iloc[0]).get_fdata().transpose(2, 1, 0)[:, ::-1]
+        filepath = Path(patient['file'].iloc[0])
+        if filepath.is_dir(): # DICOM
+            images = sitk.GetArrayFromImage(sitk.ReadImage(sorted(list(filepath.glob('*.dcm')))))
+        else: # NIfTI
+            images = nib.load(filepath).get_fdata().transpose(2, 1, 0)[:, ::-1]
         return images, patient['age'].iloc[0]
     return None, None
 
@@ -146,11 +155,14 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
         image = np.mean(images[slice_num:slice_num + width], axis=0)
         out = models[model_name].predict_image_on_the_fly(image)
 
-    diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
-    patient_number = get_patient_number_from_dropdown(patient_name)
-    label_row = diagnosis.loc[(diagnosis.PatientNumber == patient_number) & (diagnosis.SliceNumber == slice_num + 1)]
-
+    patient_identifier = get_patient_name_from_dropdown(patient_name)
     subtype = 'No_Hemorrhage'
+    if isinstance(patient_identifier, int): # Hssayeni patient
+        diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
+        label_row = diagnosis.loc[(diagnosis.PatientNumber == patient_identifier) & (diagnosis.SliceNumber == slice_num + 1)]
+    else: # Synthetic patient
+        label_row = pd.DataFrame()
+
     if not label_row.empty:
         label = label_row.to_numpy()[:, 2:-1]
         cols = diagnosis.columns[2:-1]
@@ -216,8 +228,12 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     return fig
 
 
-def update_patient_dropdown(min_age, max_age):
-    filtered_patients = patients[(patients['age'] >= min_age) & (patients['age'] <= max_age)]
+def update_patient_dropdown(min_age, max_age, datasets):
+    filtered_patients = patients[
+        (patients['age'] >= min_age) &
+        (patients['age'] <= max_age) &
+        (patients['dataset'].isin(datasets))
+    ]
     choices = [f"Patient {name} - Age {age}" for name, age in zip(filtered_patients['name'], filtered_patients['age'])]
     return gr.update(choices=choices)
 
@@ -228,6 +244,7 @@ with gr.Blocks() as demo:
             with gr.Row():
                 min_age_input = gr.Number(label="Min Age", value=0)
                 max_age_input = gr.Number(label="Max Age", value=99)
+            dataset_selector = gr.CheckboxGroup(choices=['Hssayeni', 'Synthetic'], label='Datasets', value=['Hssayeni', 'Synthetic'])
             patient_selector = gr.Dropdown(choices=[f"Patient {name} - Age {age}" for name, age in zip(patients['name'], patients['age'])], label="Patient Number")
             slice_slider = gr.Slider(minimum=0, maximum=100, step=1, label="Slice Number")
             width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
@@ -240,8 +257,9 @@ with gr.Blocks() as demo:
 
     patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
     model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
-    min_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
-    max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input], outputs=patient_selector)
+    min_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input, dataset_selector], outputs=patient_selector)
+    max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input, dataset_selector], outputs=patient_selector)
+    dataset_selector.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input, dataset_selector], outputs=patient_selector)
 
     inputs = [patient_selector, slice_slider, width_slider, thresh_slider, model_selector, avg_predictions_checkbox, display_settings_selector]
     outputs = [image_output]
