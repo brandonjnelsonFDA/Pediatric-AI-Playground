@@ -41,9 +41,6 @@ synth_labels_to_real = {
 def load_synthetic_data(synth_dir):
     synth_dir = Path(synth_dir)
     results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
-
-
-
     diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, None))).astype(float)
     names = []
     ages = []
