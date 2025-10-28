@@ -34,14 +34,15 @@ synth_labels_to_real = {
     'SDH': 'Subdural',
     'IPH': 'Intraparenchymal',
     'IVH': 'Intraventricular',
-    'SAH': 'Subarachnoid'
+    'SAH': 'Subarachnoid',
+    None: 'No_Hemorrhage',
 }
 
 
 def load_synthetic_data(synth_dir):
     synth_dir = Path(synth_dir)
     results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
-    diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, None))).astype(float)
+    diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, 'No_Hemorrhage'))).astype(float)
     names = []
     ages = []
     files = []
@@ -234,8 +235,13 @@ def update_patient_dropdown(min_age, max_age, datasets):
         (patients['age'] <= max_age) &
         (patients['dataset'].isin(datasets))
     ]
-    choices = [f"Patient {name} - Age {age}" for name, age in zip(filtered_patients['name'], filtered_patients['age'])]
+    choices = list(set([f"Patient {name} - Age {age}" for name, age in zip(filtered_patients['name'], filtered_patients['age'])]))
+    choices.sort(key=lambda o: float(o.split(' - Age')[0].split(' ')[-1]))
     return gr.update(choices=choices)
+
+
+patient_list = list(set([f"Patient {name} - Age {age}" for name, age in zip(patients['name'], patients['age'])]))
+patient_list.sort(key=lambda o: float(o.split(' - Age')[0].split(' ')[-1]))
 
 
 with gr.Blocks() as demo:
@@ -245,7 +251,7 @@ with gr.Blocks() as demo:
                 min_age_input = gr.Number(label="Min Age", value=0)
                 max_age_input = gr.Number(label="Max Age", value=99)
             dataset_selector = gr.CheckboxGroup(choices=['Hssayeni', 'Synthetic'], label='Datasets', value=['Hssayeni', 'Synthetic'])
-            patient_selector = gr.Dropdown(choices=[f"Patient {name} - Age {age}" for name, age in zip(patients['name'], patients['age'])], label="Patient Number")
+            patient_selector = gr.Dropdown(choices=patient_list, label="Patient Number")
             slice_slider = gr.Slider(minimum=0, maximum=100, step=1, label="Slice Number")
             width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
             thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")

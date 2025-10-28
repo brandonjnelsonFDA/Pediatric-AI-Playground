@@ -370,9 +370,10 @@ def download_and_unzip(url, extract_to='.'):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class InferenceManager:
-    def __init__(self, model_path, device='cuda'):
+    def __init__(self, model_path, device=device):
         self.model_path = Path(model_path)
         self.device = device
         self.labels = ['Epidural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid', 'Subdural', 'Any']
