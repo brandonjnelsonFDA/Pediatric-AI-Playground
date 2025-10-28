@@ -69,7 +69,7 @@ def load_datasets(hssayeni_dir=None, synth_dir=None, outfile='dataset.csv'):
     for dataset, name in zip([hssayeni_patients, synth_patients], ['Hssayeni', 'Synthetic']):
         dataset['dataset'] = name
         patients.append(dataset)
-    patients = pd.concat(patients, ignore_index=True)[['name', 'age', *synth_labels_to_real.values(), 'file']]
+    patients = pd.concat(patients, ignore_index=True)[['name', 'age', 'dataset', *synth_labels_to_real.values(), 'file']]
     patients.fillna(0.0, inplace=True)
     patients.to_csv(outfile, index=False)
     return patients
