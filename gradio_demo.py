@@ -29,17 +29,20 @@ def load_hssayeni_data(hssayeni_dir):
     return pd.DataFrame(rows)
 
 
+synth_labels_to_real = {
+    'EDH': 'Epidural',
+    'SDH': 'Subdural',
+    'IPH': 'Intraparenchymal',
+    'IVH': 'Intraventricular',
+    'SAH': 'Subarachnoid'
+}
+
+
 def load_synthetic_data(synth_dir):
     synth_dir = Path(synth_dir)
     results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
 
-    synth_labels_to_real = {
-        'EDH': 'Epidural',
-        'SDH': 'Subdural',
-        'IPH': 'Intraparenchymal',
-        'IVH': 'Intraventricular',
-        'SAH': 'Subarachnoid'
-    }
+
 
     diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, None))).astype(float)
     names = []
