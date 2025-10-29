@@ -8,7 +8,7 @@ physionet.org
 label_192/
 *.tar
 VIT-BATCH_*
-
+.vscode
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
