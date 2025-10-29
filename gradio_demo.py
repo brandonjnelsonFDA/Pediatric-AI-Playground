@@ -68,7 +68,7 @@ def load_datasets(hssayeni_dir=None, synth_dir=None):
     patients = pd.concat(patients_list, ignore_index=True)
 
     # Ensure all required columns are present.
-    required_cols = ['name', 'age', 'dataset', *synth_labels_to_real.values(), 'file']
+    required_cols = ['name', 'age', 'dataset', 'SliceNumber', *synth_labels_to_real.values(), 'file']
     for col in required_cols:
         if col not in patients.columns:
             patients[col] = 0.0
