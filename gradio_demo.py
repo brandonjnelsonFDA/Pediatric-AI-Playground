@@ -43,19 +43,11 @@ def load_synthetic_data(synth_dir):
     synth_dir = Path(synth_dir)
     results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
     diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, 'No_Hemorrhage'))).astype(float)
-    names = []
-    ages = []
-    files = []
-
-    rows = []
-    for idx, row in results.iterrows():
-        name = row.case_id
-        row['name'] = f'synthetic {int(name.split('_')[-1])}'
-        row['age'] = float(results.loc[results.case_id == name]['phantom'].iloc[0].split(' yr')[0])
-        row['file'] = synth_dir / name / 'dicoms'
-        row = pd.concat([row, diagnosis.iloc[idx]])
-        rows.append(row)
-    return pd.DataFrame(rows)
+    results = pd.concat([results, diagnosis], axis=1)
+    results['file'] = results.case_id.apply(lambda o: synth_dir / o / 'dicoms')
+    results['age'] = results.phantom.apply(lambda o: float(o.split(' yr')[0]))
+    results['name'] = results.case_id.apply(lambda o: f'synthetic {int(o.split('_')[-1])}')
+    return results
 
 
 def load_datasets(hssayeni_dir=None, synth_dir=None, outfile='dataset.csv'):
