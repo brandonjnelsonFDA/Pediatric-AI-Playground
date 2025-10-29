@@ -100,7 +100,7 @@ def get_patient_name_from_dropdown(patient_string):
     if parts[1] == 'synthetic':
         return f"synthetic {parts[2]}"
     else:
-        return int(parts[1])
+        return int(float(parts[1]))
 
 
 def get_patient_images(patient_name):
