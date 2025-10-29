@@ -233,15 +233,11 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
 
     patient_identifier = get_patient_name_from_dropdown(patient_name)
     subtype = 'No_Hemorrhage'
-    if isinstance(patient_identifier, int): # Hssayeni patient
-        diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
-        label_row = diagnosis.loc[(diagnosis.PatientNumber == patient_identifier) & (diagnosis.SliceNumber == slice_num + 1)]
-    else: # Synthetic patient
-        label_row = pd.DataFrame()
+    label_row = patients.loc[(patients.name == patient_identifier) & (patients.SliceNumber == slice_num + 1)]
 
     if not label_row.empty:
-        label = label_row.to_numpy()[:, 2:-1]
-        cols = diagnosis.columns[2:-1]
+        label = label_row.to_numpy()[:, 4:-1]
+        cols = patients.columns[4:-1]
         if label.size > 0:
             subtype = cols[label.argmax()]
 
