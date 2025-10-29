@@ -42,6 +42,7 @@ synth_labels_to_real = {
 def load_synthetic_data(synth_dir):
     synth_dir = Path(synth_dir)
     results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
+    results.loc[results['lesion_volume(mL)'] == 0, 'subtype'] = None
     diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, 'No_Hemorrhage'))).astype(float)
     results = pd.concat([results, diagnosis], axis=1)
     results['file'] = results.case_id.apply(lambda o: synth_dir / o / 'dicoms')
