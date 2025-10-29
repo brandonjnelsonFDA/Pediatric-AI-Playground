@@ -16,6 +16,8 @@ load_dotenv()
 def load_hssayeni_data(hssayeni_dir):
     hssayeni_dir = Path(hssayeni_dir)
     metadata = pd.read_csv(hssayeni_dir / 'Patient_demographics.csv')
+    # Rename the problematic column
+    metadata.rename(columns={'Age\n(years)': 'age_years'}, inplace=True)
     diagnosis = pd.read_csv(hssayeni_dir / 'hemorrhage_diagnosis_raw_ct.csv')
     rows = []
     for idx, row in diagnosis.iterrows():
@@ -23,7 +25,7 @@ def load_hssayeni_data(hssayeni_dir):
         if np.isnan(series_id):
             continue
         row['name'] = int(series_id)
-        row['age'] = float(metadata[metadata['Patient Number'] == series_id]['Age\n(years)'].iloc[0])
+        row['age'] = float(metadata[metadata['Patient Number'] == series_id]['age_years'].iloc[0])
         row['file'] = hssayeni_dir / 'ct_scans' / f'{int(series_id):03d}.nii'
         rows.append(row)
     return pd.DataFrame(rows)
@@ -317,6 +319,22 @@ patient_list = list(set([f"Patient {name} - Age {age}" for name, age in zip(pati
 patient_list.sort(key=lambda o: float(o.split(' - Age')[0].split(' ')[-1]))
 
 
+default_patient_string = None
+if not patients.empty:
+    # Find patient 77 from Hssayeni dataset
+    patient_77 = patients[(patients['name'] == 77) & (patients['dataset'] == 'Hssayeni')]
+    if not patient_77.empty:
+        age_77 = patient_77['age'].iloc[0]
+        potential_default = f"Patient {77.0} - Age {age_77}"
+        # Make sure it's in the list
+        if potential_default in patient_list:
+            default_patient_string = potential_default
+
+    if default_patient_string is None and patient_list:
+        # Fallback to the first patient
+        default_patient_string = patient_list[0]
+
+
 with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column(scale=1):
@@ -324,7 +342,7 @@ with gr.Blocks() as demo:
                 min_age_input = gr.Number(label="Min Age", value=0)
                 max_age_input = gr.Number(label="Max Age", value=99)
             dataset_selector = gr.CheckboxGroup(choices=['Hssayeni', 'Synthetic'], label='Datasets', value=['Hssayeni', 'Synthetic'])
-            patient_selector = gr.Dropdown(choices=patient_list, label="Patient Number")
+            patient_selector = gr.Dropdown(choices=patient_list, label="Patient Number", value=default_patient_string)
             slice_slider = gr.Slider(minimum=0, maximum=100, step=1, label="Slice Number")
             width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
             thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")
@@ -351,6 +369,20 @@ with gr.Blocks() as demo:
     model_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     avg_predictions_checkbox.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
     display_settings_selector.change(fn=visualize_ict_pipeline, inputs=inputs, outputs=outputs)
+
+    demo.load(
+        fn=visualize_ict_pipeline,
+        inputs=[
+            patient_selector,
+            slice_slider,
+            width_slider,
+            thresh_slider,
+            model_selector,
+            avg_predictions_checkbox,
+            display_settings_selector
+        ],
+        outputs=outputs
+    )
 
 if __name__ == "__main__":
     demo.launch()

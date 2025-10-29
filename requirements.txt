@@ -10,3 +10,8 @@ torchvision
 monai
 # git+https://github.com/DIDSR/InSilicoICH.git
 gradio
+pandas
+requests
+torch
+matplotlib
+SimpleITK
