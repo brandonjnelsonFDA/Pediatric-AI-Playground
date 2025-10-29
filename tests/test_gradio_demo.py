@@ -26,7 +26,7 @@ class TestGradioDemo(unittest.TestCase):
 
         # Dummy synthetic data
         with open(os.path.join(self.synth_dir, 'synth_data.csv'), 'w') as f:
-            f.write('subtype,case_id,phantom\nEDH,case_1,10 yr\n')
+            f.write('subtype,case_id,phantom,"lesion_volume(mL)","image_file_path"\nEDH,case_1,10 yr,1.0,"/path/to/slice_1"\n')
 
         # Dummy model file
         Path(os.path.join(self.model_dir, 'CAD_1', 'model.pth')).touch()
