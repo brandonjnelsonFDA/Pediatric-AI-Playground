@@ -316,9 +316,11 @@ patient_list.sort(key=lambda o: float(o.split(' - Age')[0].split(' ')[-1]))
 
 
 default_patient_string = None
+default_patient_max_slice = 100
 if not patients.empty:
     # Find patient 77 from Hssayeni dataset
     patient_77 = patients[(patients['name'] == 77) & (patients['dataset'] == 'Hssayeni')]
+    default_patient_max_slice.SliceNumber.max()
     if not patient_77.empty:
         age_77 = patient_77['age'].iloc[0]
         potential_default = f"Patient {77.0} - Age {age_77}"
@@ -339,8 +341,8 @@ with gr.Blocks() as demo:
                 max_age_input = gr.Number(label="Max Age", value=99)
             dataset_selector = gr.CheckboxGroup(choices=['Hssayeni', 'Synthetic'], label='Datasets', value=['Hssayeni', 'Synthetic'])
             patient_selector = gr.Dropdown(choices=patient_list, label="Patient Number", value=default_patient_string)
-            slice_slider = gr.Slider(minimum=0, maximum=100, step=1, label="Slice Number")
-            width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=5, label="Width")
+            slice_slider = gr.Slider(minimum=0, maximum=default_patient_max_slice, step=1, label="Slice Number", value=default_patient_max_slice // 2)
+            width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=1, label="Width")
             thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")
             model_selector = gr.Dropdown(choices=list(models.keys()), label="Model Name", value='CAD_1')
             avg_predictions_checkbox = gr.Checkbox(label="Average predictions (faster)", value=True)
