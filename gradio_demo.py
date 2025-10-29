@@ -42,11 +42,13 @@ synth_labels_to_real = {
 def load_synthetic_data(synth_dir):
     synth_dir = Path(synth_dir)
     results = pd.concat([pd.read_csv(o) for o in synth_dir.rglob('*.csv')])
+    results.loc[results['lesion_volume(mL)'] == 0, 'subtype'] = None
     diagnosis = pd.get_dummies(results.subtype.apply(lambda o: synth_labels_to_real.get(o, 'No_Hemorrhage'))).astype(float)
     results = pd.concat([results, diagnosis], axis=1)
     results['file'] = results.case_id.apply(lambda o: synth_dir / o / 'dicoms')
     results['age'] = results.phantom.apply(lambda o: float(o.split(' yr')[0]))
     results['name'] = results.case_id.apply(lambda o: f'synthetic {int(o.split('_')[-1])}')
+    results['SliceNumber'] = results['image_file_path'].apply(lambda o: int(Path(o).stem.split('_')[-1]))
     return results
 
 
@@ -68,7 +70,7 @@ def load_datasets(hssayeni_dir=None, synth_dir=None):
     patients = pd.concat(patients_list, ignore_index=True)
 
     # Ensure all required columns are present.
-    required_cols = ['name', 'age', 'dataset', *synth_labels_to_real.values(), 'file']
+    required_cols = ['name', 'age', 'dataset', 'SliceNumber', *synth_labels_to_real.values(), 'file']
     for col in required_cols:
         if col not in patients.columns:
             patients[col] = 0.0
@@ -121,13 +123,81 @@ def get_patient_images(patient_name):
     return None, None
 
 
+def get_hemorrhage_info(patient_df):
+    """
+    Analyzes patient data to find hemorrhage slices and format information.
+
+    Args:
+        patient_df (pd.DataFrame): DataFrame with slice-wise data for a single patient.
+
+    Returns:
+        tuple: A tuple containing:
+            - int: The ideal starting slice number.
+            - str: A formatted string describing hemorrhage locations.
+    """
+    hemorrhage_types = ['Epidural', 'Subdural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid']
+    hemorrhage_info = {}
+
+    for hemorrhage_type in hemorrhage_types:
+        if hemorrhage_type not in patient_df.columns or patient_df[hemorrhage_type].sum() == 0:
+            continue
+
+        slices = patient_df[patient_df[hemorrhage_type] == 1]['SliceNumber'].tolist()
+
+        if not slices:
+            continue
+
+        slices.sort()
+        ranges = []
+        start_slice = slices[0]
+        for i in range(1, len(slices)):
+            if slices[i] != slices[i-1] + 1:
+                ranges.append((start_slice, slices[i-1]))
+                start_slice = slices[i]
+        ranges.append((start_slice, slices[-1]))
+
+        if ranges:
+            hemorrhage_info[hemorrhage_type] = ranges
+
+    all_ranges_with_type = []
+    for hemo_type, ranges in hemorrhage_info.items():
+        for r in ranges:
+            all_ranges_with_type.append({'type': hemo_type, 'start': r[0], 'end': r[1]})
+
+    all_ranges_with_type.sort(key=lambda x: x['start'])
+
+    info_str_parts = []
+    for r_info in all_ranges_with_type:
+        hemo_type = r_info['type']
+        start, end = r_info['start'], r_info['end']
+        if start == end:
+            info_str_parts.append(f"{hemo_type}: {start}")
+        else:
+            info_str_parts.append(f"{hemo_type}: {start}-{end}")
+
+    info_str = ", ".join(info_str_parts)
+
+    initial_slice = len(patient_df) // 2
+    if all_ranges_with_type:
+        first_hemorrhage = all_ranges_with_type[0]
+        initial_slice = (first_hemorrhage['start'] + first_hemorrhage['end']) // 2
+
+    return initial_slice, info_str
+
+
 def load_patient_data(patient_name, model_name):
     images, _ = get_patient_images(patient_name)
     if images is not None:
         models[model_name].load_patient(images)
         max_slices = len(images) - 1
-        return gr.update(maximum=max_slices, value=max_slices // 2)
-    return gr.update(maximum=0, value=0)
+
+        patient_identifier = get_patient_name_from_dropdown(patient_name)
+        patient_df = patients[patients['name'] == patient_identifier]
+
+        initial_slice, info_str = get_hemorrhage_info(patient_df)
+
+        return gr.update(maximum=max_slices, value=initial_slice), info_str
+    return gr.update(maximum=0, value=0), ""
 
 
 def normalize(img, vmin=None, vmax=None):
@@ -263,9 +333,10 @@ with gr.Blocks() as demo:
         with gr.Column(scale=2):
             image_output = gr.Plot(label="CT Slice")
             display_settings_selector = gr.Dropdown(choices=list(display_settings.keys()), label="Display Settings", value='brain')
+            hemorrhage_info_box = gr.Textbox(label="Hemorrhage Info", interactive=False)
 
-    patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
-    model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=slice_slider)
+    patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=[slice_slider, hemorrhage_info_box])
+    model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=[slice_slider, hemorrhage_info_box])
     min_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input, dataset_selector], outputs=patient_selector)
     max_age_input.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input, dataset_selector], outputs=patient_selector)
     dataset_selector.change(fn=update_patient_dropdown, inputs=[min_age_input, max_age_input, dataset_selector], outputs=patient_selector)
