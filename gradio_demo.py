@@ -50,20 +50,31 @@ def load_synthetic_data(synth_dir):
     return results
 
 
-def load_datasets(hssayeni_dir=None, synth_dir=None, outfile='dataset.csv'):
-    outfile = Path(outfile)
-    if outfile.exists():
-        return pd.read_csv(outfile)
-    hssayeni_patients = load_hssayeni_data(hssayeni_dir) if hssayeni_dir else []
-    synth_patients = load_synthetic_data(synth_dir) if synth_dir else []
+def load_datasets(hssayeni_dir=None, synth_dir=None):
+    hssayeni_patients = load_hssayeni_data(hssayeni_dir) if hssayeni_dir else pd.DataFrame()
+    synth_patients = load_synthetic_data(synth_dir) if synth_dir else pd.DataFrame()
 
-    patients = []
-    for dataset, name in zip([hssayeni_patients, synth_patients], ['Hssayeni', 'Synthetic']):
-        dataset['dataset'] = name
-        patients.append(dataset)
-    patients = pd.concat(patients, ignore_index=True)[['name', 'age', 'dataset', *synth_labels_to_real.values(), 'file']]
+    patients_list = []
+    if not hssayeni_patients.empty:
+        hssayeni_patients['dataset'] = 'Hssayeni'
+        patients_list.append(hssayeni_patients)
+    if not synth_patients.empty:
+        synth_patients['dataset'] = 'Synthetic'
+        patients_list.append(synth_patients)
+
+    if not patients_list:
+        return pd.DataFrame(columns=['name', 'age', 'dataset', *synth_labels_to_real.values(), 'file'])
+
+    patients = pd.concat(patients_list, ignore_index=True)
+
+    # Ensure all required columns are present.
+    required_cols = ['name', 'age', 'dataset', *synth_labels_to_real.values(), 'file']
+    for col in required_cols:
+        if col not in patients.columns:
+            patients[col] = 0.0
+
+    patients = patients[required_cols]
     patients.fillna(0.0, inplace=True)
-    patients.to_csv(outfile, index=False)
     return patients
 
 hssayeni_dir = Path(os.environ['HSSAYENI_DIR'])
