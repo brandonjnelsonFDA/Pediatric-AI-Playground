@@ -1,3 +1,4 @@
+
 from pathlib import Path
 import os
 
@@ -49,7 +50,7 @@ def load_synthetic_data(synth_dir):
     results = pd.concat([results, diagnosis], axis=1)
     results['file'] = results.case_id.apply(lambda o: synth_dir / o / 'dicoms')
     results['age'] = results.phantom.apply(lambda o: float(o.split(' yr')[0]))
-    results['name'] = results.case_id.apply(lambda o: f'synthetic {int(o.split('_')[-1])}')
+    results['name'] = results.case_id.apply(lambda o: f"synthetic {int(o.split('_')[-1])}")
     results['SliceNumber'] = results['image_file_path'].apply(lambda o: int(Path(o).stem.split('_')[-1]))
     return results
 
