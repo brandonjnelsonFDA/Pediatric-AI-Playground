@@ -232,24 +232,50 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
         out = models[model_name].predict_image_on_the_fly(image)
 
     patient_identifier = get_patient_name_from_dropdown(patient_name)
-    subtype = 'No_Hemorrhage'
     label_row = patients.loc[(patients.name == patient_identifier) & (patients.SliceNumber == slice_num + 1)]
 
+    truth_labels = set()
     if not label_row.empty:
-        label = label_row.to_numpy()[:, 4:-1]
+        label_vector = label_row.iloc[:, 4:-1].to_numpy()[0]
         cols = patients.columns[4:-1]
-        if label.size > 0:
-            subtype = cols[label.argmax()]
+        truth_labels = {cols[i] for i, val in enumerate(label_vector) if val == 1}
 
-    out_copy = out.copy()
-    out_copy.pop('Any', None)
-    max_label = max(out_copy, key=out_copy.get) if out_copy else 'No_Hemorrhage'
-    predicted_label = max_label if out_copy.get(max_label, 0) > thresh else 'No_Hemorrhage'
+    if not truth_labels:
+        truth_labels.add('No_Hemorrhage')
 
-    color = "green" if predicted_label == subtype else "red"
-    prediction_text = f"age: {age}, model prediction: {predicted_label} | truth: {subtype}"
+    title_parts = []
+    title_color = 'green'
+    hemorrhage_types = [col for col in patients.columns[4:-1] if col != 'No_Hemorrhage' and col in out]
 
-    fig.suptitle(prediction_text, color=color)
+    all_true_negatives = True
+    for hemorrhage_type in hemorrhage_types:
+        is_present_in_truth = hemorrhage_type in truth_labels
+        is_predicted = out.get(hemorrhage_type, 0) > thresh
+
+        if is_present_in_truth and is_predicted:  # True Positive
+            title_parts.append(f'{hemorrhage_type} (TP)')
+            all_true_negatives = False
+        elif not is_present_in_truth and is_predicted:  # False Positive
+            title_parts.append(f'{hemorrhage_type} (FP)')
+            title_color = 'red'
+            all_true_negatives = False
+        elif is_present_in_truth and not is_predicted:  # False Negative
+            title_parts.append(f'{hemorrhage_type} (FN)')
+            title_color = 'red'
+            all_true_negatives = False
+        # True negatives are ignored in the title
+
+    if all_true_negatives:
+        prediction_text = "No hemorrhages detected"
+        title_color = 'black'
+    else:
+        truth_text = f"Truth: {', '.join(sorted(list(truth_labels)))}"
+        prediction_text = f"Predictions: {', '.join(title_parts)}"
+        prediction_text = f"Age: {age} | {truth_text} | {prediction_text}"
+
+    # Matplotlib's suptitle does not support multi-colored text.
+    # As a workaround, we set the entire title to red if any prediction is incorrect.
+    fig.suptitle(prediction_text, color=title_color)
     window, level = display_settings[display_setting]
     vmin = level - window // 2
     vmax = level + window //2
@@ -261,33 +287,17 @@ def visualize_ict_pipeline(patient_name, slice_num, width=5, thresh=0.3, model_n
     values = list(out.values())
     bar_colors = []
     for key, value in out.items():
-        if key == 'Any':
-            # "Any" label logic
-            is_hemorrhage_present = subtype != 'No_Hemorrhage'
-            is_prediction_positive = value > thresh
+        is_present_in_truth = key in truth_labels
+        is_predicted = value > thresh
 
-            if is_prediction_positive and is_hemorrhage_present:
-                bar_colors.append('green')  # True Positive
-            elif not is_prediction_positive and is_hemorrhage_present:
-                bar_colors.append('red')  # False Negative
-            elif is_prediction_positive and not is_hemorrhage_present:
-                bar_colors.append('red')  # False Positive
-            else:
-                bar_colors.append('blue')  # True Negative
-        else:
-            # Original logic for other subtypes
-            # True Positive
-            if value > thresh and key == subtype:
-                bar_colors.append('green')
-            # False Positive
-            elif value > thresh and key != subtype:
-                bar_colors.append('red')
-            # False Negative
-            elif value <= thresh and key == subtype:
-                bar_colors.append('red')
-            # True Negative
-            else:
-                bar_colors.append('blue')
+        if is_present_in_truth and is_predicted:  # True Positive
+            bar_colors.append('green')
+        elif not is_present_in_truth and is_predicted:  # False Positive
+            bar_colors.append('red')
+        elif is_present_in_truth and not is_predicted:  # False Negative
+            bar_colors.append('red')
+        else:  # True Negative
+            bar_colors.append('blue')
     axs[1].clear()
     axs[1].bar(keys, values, color=bar_colors)
     axs[1].set_ylabel('model output')
