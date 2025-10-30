@@ -1,3 +1,4 @@
+
 from pathlib import Path
 import os
 
@@ -320,7 +321,7 @@ default_patient_max_slice = 100
 if not patients.empty:
     # Find patient 77 from Hssayeni dataset
     patient_77 = patients[(patients['name'] == 77) & (patients['dataset'] == 'Hssayeni')]
-    default_patient_max_slice.SliceNumber.max()
+    default_patient_max_slice = patient_77.SliceNumber.max()
     if not patient_77.empty:
         age_77 = patient_77['age'].iloc[0]
         potential_default = f"Patient {77.0} - Age {age_77}"
