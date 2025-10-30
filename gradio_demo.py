@@ -327,10 +327,14 @@ patient_list.sort(key=lambda o: float(o.split(' - Age')[0].split(' ')[-1]))
 
 default_patient_string = None
 default_patient_max_slice = 100
+initial_slice = default_patient_max_slice // 2
+info_str = ''
 if not patients.empty:
     # Find patient 77 from Hssayeni dataset
     patient_77 = patients[(patients['name'] == 77) & (patients['dataset'] == 'Hssayeni')]
     default_patient_max_slice = patient_77.SliceNumber.max()
+    initial_slice, info_str = get_hemorrhage_info(patient_77)
+
     if not patient_77.empty:
         age_77 = patient_77['age'].iloc[0]
         potential_default = f"Patient {77.0} - Age {age_77}"
@@ -351,7 +355,7 @@ with gr.Blocks() as demo:
                 max_age_input = gr.Number(label="Max Age", value=99)
             dataset_selector = gr.CheckboxGroup(choices=['Hssayeni', 'Synthetic'], label='Datasets', value=['Hssayeni', 'Synthetic'])
             patient_selector = gr.Dropdown(choices=patient_list, label="Patient Number", value=default_patient_string)
-            slice_slider = gr.Slider(minimum=0, maximum=default_patient_max_slice, step=1, label="Slice Number", value=default_patient_max_slice // 2)
+            slice_slider = gr.Slider(minimum=0, maximum=default_patient_max_slice, step=1, label="Slice Number", value=initial_slice)
             width_slider = gr.Slider(minimum=1, maximum=10, step=1, value=1, label="Width")
             thresh_slider = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.3, label="Threshold")
             model_selector = gr.Dropdown(choices=list(models.keys()), label="Model Name", value='CAD_1')
@@ -359,7 +363,7 @@ with gr.Blocks() as demo:
         with gr.Column(scale=2):
             image_output = gr.Plot(label="CT Slice")
             display_settings_selector = gr.Dropdown(choices=list(display_settings.keys()), label="Display Settings", value='brain')
-            hemorrhage_info_box = gr.Textbox(label="Hemorrhage Info", interactive=False)
+            hemorrhage_info_box = gr.Textbox(label="Hemorrhage Info", interactive=False, value=info_str)
 
     patient_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=[slice_slider, hemorrhage_info_box])
     model_selector.change(fn=load_patient_data, inputs=[patient_selector, model_selector], outputs=[slice_slider, hemorrhage_info_box])
