@@ -1,5 +1,6 @@
 # Project specific
 model_files/
+results
 *.dcm
 *.nii 
 case_*/
