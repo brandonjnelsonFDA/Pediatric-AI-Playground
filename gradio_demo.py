@@ -57,6 +57,14 @@ def load_synthetic_data(synth_dir):
 
 def load_datasets(hssayeni_dir=None, synth_dir=None):
     hssayeni_patients = load_hssayeni_data(hssayeni_dir) if hssayeni_dir else pd.DataFrame()
+    
+    if synth_dir:
+        synth_dir = Path(synth_dir)
+        # Check if data exists
+        if not list(synth_dir.rglob('*.csv')):
+            print("Synthetic data not found. Downloading...")
+            download_and_unzip('https://zenodo.org/records/15691337/files/manuscript_100_280mA_wME.zip', extract_to=synth_dir)
+    
     synth_patients = load_synthetic_data(synth_dir) if synth_dir else pd.DataFrame()
 
     patients_list = []
