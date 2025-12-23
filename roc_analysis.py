@@ -38,10 +38,7 @@ def get_ground_truth_and_predictions_with_metadata(patients_df, dataset_name):
         'CAD_3': {'Slice': {'y_true': [], 'y_score': []}, 'Patient': {'y_true': [], 'y_score': []}}
     }
 
-    # List to store detailed metadata for montage generation
-    # Structure: {'model': name, 'dataset': name, 'patient': name, 'slice_idx': int,
-    #             'image': path_or_obj, 'y_true': dict, 'y_score': dict}
-    # To save memory, we won't store the image array, but the means to get it.
+    # Metadata for montage generation
     metadata = []
 
     subtypes = ['Epidural', 'Subdural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid']
@@ -61,6 +58,7 @@ def get_ground_truth_and_predictions_with_metadata(patients_df, dataset_name):
 
         patient_gt = dataset_df[dataset_df['name'] == patient_name]
 
+        # Patient Level Ground Truth
         patient_gt_any_slice = {}
         for subtype in subtypes:
             patient_gt_any_slice[subtype] = 1.0 if patient_gt[subtype].sum() > 0 else 0.0
@@ -91,7 +89,7 @@ def get_ground_truth_and_predictions_with_metadata(patients_df, dataset_name):
                 results[model_name]['Slice']['y_true'].append(gt_row)
                 results[model_name]['Slice']['y_score'].append(prediction)
 
-                # Store metadata for Montage
+                # Store metadata
                 metadata.append({
                     'model': model_name,
                     'dataset': dataset_name,
@@ -114,15 +112,16 @@ def get_ground_truth_and_predictions_with_metadata(patients_df, dataset_name):
 def plot_roc_curves_with_thresholds(results, dataset_name, output_dir):
     """
     Generates ROC curves and calculates thresholds for specific sensitivities.
-    Returns a dict of thresholds for 'Any' class at Slice level for simplicity
-    (or more complex if needed).
+    Returns:
+        auc_df: DataFrame of AUC scores.
+        thresholds: Nested dict of thresholds for [Model][Level][Type][Sensitivity]
     """
     os.makedirs(output_dir, exist_ok=True)
 
     classes = ['Epidural', 'Subdural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid', 'Any']
     auc_scores = []
 
-    # Store thresholds for montage generation: thresholds[model]['Any'] = {0.1: val, 0.5: val, 0.9: val}
+    # Store thresholds: thresholds[model][level][type][0.9] = val
     calculated_thresholds = {}
 
     for level in ['Slice', 'Patient']:
@@ -133,7 +132,7 @@ def plot_roc_curves_with_thresholds(results, dataset_name, output_dir):
 
         for model_name, model_data in results.items():
             if model_name not in calculated_thresholds:
-                calculated_thresholds[model_name] = {}
+                calculated_thresholds[model_name] = {'Slice': {}, 'Patient': {}}
 
             data = model_data[level]
             if not data['y_true']:
@@ -152,15 +151,13 @@ def plot_roc_curves_with_thresholds(results, dataset_name, output_dir):
             plt.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.2f})')
             plotted_any = True
 
-            # Calculate Thresholds for 10%, 50%, 90% Sensitivity
-            # Sensitivity = TPR
+            # Calculate Thresholds
             target_sensitivities = [0.1, 0.5, 0.9]
             model_thresholds = {}
 
             colors = {0.1: 'red', 0.5: 'orange', 0.9: 'green'}
 
             for target_sens in target_sensitivities:
-                # Find index where TPR is closest to target_sens
                 idx = np.argmin(np.abs(tpr - target_sens))
                 threshold_val = thres[idx]
                 actual_sens = tpr[idx]
@@ -168,13 +165,11 @@ def plot_roc_curves_with_thresholds(results, dataset_name, output_dir):
 
                 model_thresholds[target_sens] = threshold_val
 
-                # Plot marker
                 plt.plot(actual_fpr, actual_sens, marker='o', markersize=5, color=colors[target_sens])
-                if level == 'Slice' and model_name == 'CAD_1': # Label only once to avoid clutter
+                if level == 'Slice' and model_name == 'CAD_1':
                      plt.text(actual_fpr, actual_sens, f'{target_sens*100:.0f}% Sens', fontsize=8)
 
-            if level == 'Slice':
-                calculated_thresholds[model_name]['Any'] = model_thresholds
+            calculated_thresholds[model_name][level]['Any'] = model_thresholds
 
         if plotted_any:
             plt.plot([0, 1], [0, 1], 'k--', lw=2)
@@ -210,19 +205,17 @@ def plot_roc_curves_with_thresholds(results, dataset_name, output_dir):
                 plt.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.2f})')
                 plotted_subtype = True
 
-                # Calculate thresholds for subtype
-                if level == 'Slice':
-                    if subtype not in calculated_thresholds[model_name]:
-                        calculated_thresholds[model_name][subtype] = {}
+                # Calculate thresholds
+                if subtype not in calculated_thresholds[model_name][level]:
+                    calculated_thresholds[model_name][level][subtype] = {}
 
-                    target_sensitivities = [0.1, 0.5, 0.9]
-                    colors = {0.1: 'red', 0.5: 'orange', 0.9: 'green'}
-                    for target_sens in target_sensitivities:
-                        idx = np.argmin(np.abs(tpr - target_sens))
-                        threshold_val = thres[idx]
-                        calculated_thresholds[model_name][subtype][target_sens] = threshold_val
-                        plt.plot(fpr[idx], tpr[idx], marker='o', markersize=5, color=colors[target_sens])
-
+                target_sensitivities = [0.1, 0.5, 0.9]
+                colors = {0.1: 'red', 0.5: 'orange', 0.9: 'green'}
+                for target_sens in target_sensitivities:
+                    idx = np.argmin(np.abs(tpr - target_sens))
+                    threshold_val = thres[idx]
+                    calculated_thresholds[model_name][level][subtype][target_sens] = threshold_val
+                    plt.plot(fpr[idx], tpr[idx], marker='o', markersize=5, color=colors[target_sens])
 
             if plotted_subtype:
                 plt.plot([0, 1], [0, 1], 'k--', lw=2)
@@ -238,86 +231,150 @@ def plot_roc_curves_with_thresholds(results, dataset_name, output_dir):
 
     return pd.DataFrame(auc_scores), calculated_thresholds
 
+def calculate_performance_metrics(results, thresholds, dataset_name):
+    """
+    Calculates PPV, NPV, Prevalence, and Counts at 90% Sensitivity.
+    """
+    metrics = []
+    target_sens = 0.9
+
+    classes = ['Epidural', 'Subdural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid', 'Any']
+
+    for level in ['Slice', 'Patient']:
+        for model_name, model_data in results.items():
+            if model_name not in thresholds or level not in thresholds[model_name]:
+                continue
+
+            data = model_data[level]
+            if not data['y_true']:
+                continue
+
+            for subtype in classes:
+                if subtype not in thresholds[model_name][level]:
+                    continue
+                if target_sens not in thresholds[model_name][level][subtype]:
+                    continue
+
+                thresh_val = thresholds[model_name][level][subtype][target_sens]
+
+                y_true = [item[subtype] for item in data['y_true']]
+                y_score = [item[subtype] for item in data['y_score']]
+
+                if not y_true:
+                    continue
+
+                # Convert to binary
+                y_pred = [1.0 if score >= thresh_val else 0.0 for score in y_score]
+
+                tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+
+                total = tn + fp + fn + tp
+                prevalence = (tp + fn) / total if total > 0 else 0
+                ppv = tp / (tp + fp) if (tp + fp) > 0 else 0
+                npv = tn / (tn + fn) if (tn + fn) > 0 else 0
+
+                metrics.append({
+                    'Dataset': dataset_name,
+                    'Level': level,
+                    'Model': model_name,
+                    'Type': subtype,
+                    'Threshold_90Sens': thresh_val,
+                    'PPV': ppv,
+                    'NPV': npv,
+                    'Prevalence': prevalence,
+                    'Count_Total': total,
+                    'Count_Pos': tp + fn,
+                    'Count_Neg': tn + fp,
+                    'TP': tp,
+                    'FP': fp,
+                    'TN': tn,
+                    'FN': fn
+                })
+
+    return pd.DataFrame(metrics)
+
 def generate_montages(metadata, thresholds, output_dir, dataset_name):
     """
-    Generates 3x3 montages for TP, TN, FP, FN at different thresholds.
+    Generates 3x3 montages for TP, TN, FP, FN at 90% Sensitivity.
+    Applies windowing: Width 300, Level 150 -> vmin 0, vmax 300.
     """
     montage_dir = os.path.join(output_dir, 'Montages')
     os.makedirs(montage_dir, exist_ok=True)
 
-    # Focus on 'Any' and one model (e.g., CAD_1) to keep it manageable as discussed
     model_name = 'CAD_1'
     categories = ['Any'] + ['Epidural', 'Subdural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid']
 
     # Filter metadata for this model
     model_metadata = [m for m in metadata if m['model'] == model_name]
-
     if not model_metadata:
         return
 
-    # For each category (Any + subtypes)
+    target_sens = 0.9
+    sens_label = "HighSens" # Only High Sens requested
+
+    # Thresholds for montage are primarily based on Slice level predictions
+    # because metadata is slice-based.
+    if model_name not in thresholds or 'Slice' not in thresholds[model_name]:
+        return
+
+    model_thresholds = thresholds[model_name]['Slice']
+
     for category in categories:
-        if category not in thresholds[model_name]:
+        if category not in model_thresholds or target_sens not in model_thresholds[category]:
             continue
 
-        # For each sensitivity threshold (Low, Med, High)
-        sens_labels = {0.1: 'LowSens', 0.5: 'MedSens', 0.9: 'HighSens'}
+        thresh_val = model_thresholds[category][target_sens]
 
-        for sens, thresh_val in thresholds[model_name][category].items():
-            sens_label = sens_labels.get(sens, f"Sens{sens}")
+        tp_list, tn_list, fp_list, fn_list = [], [], [], []
 
-            # Buckets
-            tp_list, tn_list, fp_list, fn_list = [], [], [], []
+        for item in model_metadata:
+            truth = item['y_true'][category]
+            score = item['y_score'][category]
+            pred = 1.0 if score >= thresh_val else 0.0
 
-            for item in model_metadata:
-                truth = item['y_true'][category]
-                score = item['y_score'][category]
-                pred = 1.0 if score >= thresh_val else 0.0
+            if truth == 1.0 and pred == 1.0:
+                tp_list.append(item)
+            elif truth == 0.0 and pred == 0.0:
+                tn_list.append(item)
+            elif truth == 0.0 and pred == 1.0:
+                fp_list.append(item)
+            elif truth == 1.0 and pred == 0.0:
+                fn_list.append(item)
 
-                if truth == 1.0 and pred == 1.0:
-                    tp_list.append(item)
-                elif truth == 0.0 and pred == 0.0:
-                    tn_list.append(item)
-                elif truth == 0.0 and pred == 1.0:
-                    fp_list.append(item)
-                elif truth == 1.0 and pred == 0.0:
-                    fn_list.append(item)
+        outcomes = {'TP': tp_list, 'TN': tn_list, 'FP': fp_list, 'FN': fn_list}
 
-            # Generate plots for each outcome
-            outcomes = {'TP': tp_list, 'TN': tn_list, 'FP': fp_list, 'FN': fn_list}
+        for outcome_name, items_list in outcomes.items():
+            if not items_list:
+                continue
 
-            for outcome_name, items_list in outcomes.items():
-                if not items_list:
-                    continue
+            n_samples = 9
+            selected_items = random.sample(items_list, min(len(items_list), n_samples))
 
-                # Select N random samples
-                n_samples = 9
-                selected_items = random.sample(items_list, min(len(items_list), n_samples))
+            fig, axes = plt.subplots(3, 3, figsize=(10, 10))
+            fig.suptitle(f'{dataset_name} {model_name} {category} {outcome_name} ({sens_label}, Thresh={thresh_val:.2f})')
 
-                fig, axes = plt.subplots(3, 3, figsize=(10, 10))
-                fig.suptitle(f'{dataset_name} {model_name} {category} {outcome_name} ({sens_label}, Thresh={thresh_val:.2f})')
-
-                for i, ax in enumerate(axes.flat):
-                    if i < len(selected_items):
-                        item = selected_items[i]
-                        # Load image
-                        images, _ = get_patient_images(item['patient_ui_string'])
-                        if images is not None:
-                            img_slice = images[item['slice_idx']]
-                            ax.imshow(img_slice, cmap='gray')
-                            ax.axis('off')
-                            ax.set_title(f"Score: {item['y_score'][category]:.2f}")
-                    else:
+            for i, ax in enumerate(axes.flat):
+                if i < len(selected_items):
+                    item = selected_items[i]
+                    images, _ = get_patient_images(item['patient_ui_string'])
+                    if images is not None:
+                        img_slice = images[item['slice_idx']]
+                        # Apply Window: Level 150, Width 300 => vmin 0, vmax 300
+                        ax.imshow(img_slice, cmap='gray', vmin=0, vmax=300)
                         ax.axis('off')
+                        ax.set_title(f"Score: {item['y_score'][category]:.2f}")
+                else:
+                    ax.axis('off')
 
-                plt.tight_layout()
-                filename = f"{dataset_name}_{model_name}_{category}_{outcome_name}_{sens_label}.png"
-                plt.savefig(os.path.join(montage_dir, filename))
-                plt.close()
+            plt.tight_layout()
+            filename = f"{dataset_name}_{model_name}_{category}_{outcome_name}_{sens_label}.png"
+            plt.savefig(os.path.join(montage_dir, filename))
+            plt.close()
 
 def plot_confusion_matrices(metadata, thresholds, output_dir, dataset_name):
     """
     Generates confusion matrices for 'Any' and subtypes at 90% sensitivity threshold.
+    Using Slice level thresholds.
     """
     cm_dir = os.path.join(output_dir, 'Confusion_Matrices')
     os.makedirs(cm_dir, exist_ok=True)
@@ -327,13 +384,17 @@ def plot_confusion_matrices(metadata, thresholds, output_dir, dataset_name):
 
     model_metadata = [m for m in metadata if m['model'] == model_name]
 
+    if model_name not in thresholds or 'Slice' not in thresholds[model_name]:
+        return
+    model_thresholds = thresholds[model_name]['Slice']
+
     categories = ['Any'] + ['Epidural', 'Subdural', 'Intraparenchymal', 'Intraventricular', 'Subarachnoid']
 
     for category in categories:
-        if category not in thresholds[model_name] or target_sens not in thresholds[model_name][category]:
+        if category not in model_thresholds or target_sens not in model_thresholds[category]:
             continue
 
-        thresh_val = thresholds[model_name][category][target_sens]
+        thresh_val = model_thresholds[category][target_sens]
 
         y_true = []
         y_pred = []
@@ -362,6 +423,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     all_auc_scores = []
+    all_metrics = []
 
     # Process Hssayeni
     if not patients_df[patients_df['dataset'] == 'Hssayeni'].empty:
@@ -369,7 +431,9 @@ def main():
         auc_hssayeni, thresholds_hssayeni = plot_roc_curves_with_thresholds(results_hssayeni, 'Hssayeni', output_dir)
         all_auc_scores.append(auc_hssayeni)
 
-        # Montages & Confusion Matrices
+        metrics_hssayeni = calculate_performance_metrics(results_hssayeni, thresholds_hssayeni, 'Hssayeni')
+        all_metrics.append(metrics_hssayeni)
+
         generate_montages(meta_hssayeni, thresholds_hssayeni, output_dir, 'Hssayeni')
         plot_confusion_matrices(meta_hssayeni, thresholds_hssayeni, output_dir, 'Hssayeni')
 
@@ -379,7 +443,9 @@ def main():
         auc_synth, thresholds_synth = plot_roc_curves_with_thresholds(results_synth, 'Synthetic', output_dir)
         all_auc_scores.append(auc_synth)
 
-        # Montages & Confusion Matrices
+        metrics_synth = calculate_performance_metrics(results_synth, thresholds_synth, 'Synthetic')
+        all_metrics.append(metrics_synth)
+
         generate_montages(meta_synth, thresholds_synth, output_dir, 'Synthetic')
         plot_confusion_matrices(meta_synth, thresholds_synth, output_dir, 'Synthetic')
 
@@ -389,6 +455,14 @@ def main():
         final_auc_df.to_csv(os.path.join(output_dir, 'auc_scores.csv'), index=False)
         print("\nAUC Scores:")
         print(final_auc_df)
+
+    # Save Metrics Report
+    if all_metrics:
+        final_metrics_df = pd.concat(all_metrics, ignore_index=True)
+        final_metrics_df.to_csv(os.path.join(output_dir, 'performance_metrics.csv'), index=False)
+        print("\nPerformance Metrics (90% Sensitivity):")
+        print(final_metrics_df[['Dataset', 'Level', 'Model', 'Type', 'Threshold_90Sens', 'PPV', 'NPV', 'Prevalence']])
+
     else:
         print("No results generated.")
 
