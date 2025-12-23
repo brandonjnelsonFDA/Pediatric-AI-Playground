@@ -58,7 +58,15 @@ class TestROCAnalysis(unittest.TestCase):
                 'Intraventricular': low_prob, 'Subarachnoid': low_prob, 'Any': any_ich
             }
 
-        mock_model_instance.get_slice_prediction.side_effect = [
+        # Side effect for slice predictions
+        # Called once for inference pass, and again for montage generation
+        # We need enough side effects or use a fixed return based on args?
+        # Simpler: just cycle or use a large list.
+        # Initial Pass: 6 calls.
+        # Montage Pass: Random sample of 9 (or fewer).
+        # So we need > 6 side effects.
+
+        base_preds = [
             # Patient 49 (Slice 1, 2, 3)
             pred(low_prob, low_prob),   # Slice 1 (GT: Neg)
             pred(high_prob, high_prob), # Slice 2 (GT: Pos Epidural)
@@ -68,6 +76,9 @@ class TestROCAnalysis(unittest.TestCase):
             pred(low_prob, low_prob),   # Slice 2 (GT: Neg)
             pred(low_prob, low_prob),   # Slice 3 (GT: Neg)
         ]
+
+        # Extend for montage calls (just repeat)
+        mock_model_instance.get_slice_prediction.side_effect = base_preds * 20
 
         # FIX: Return a list so it can be iterated multiple times (once per patient)
         mock_models.items.return_value = [('CAD_1', mock_model_instance)]
@@ -91,6 +102,23 @@ class TestROCAnalysis(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Slice_Epidural_ROC.png')))
         self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Patient_Overall_ROC.png')))
         self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Patient_Epidural_ROC.png')))
+
+        # Check Montage Directory
+        montage_dir = os.path.join('results', 'Montages')
+        self.assertTrue(os.path.exists(montage_dir))
+        # Since we mock data perfectly, we might not have FP or FN, but we should have TP/TN for 'Any'
+        # P49 Slice 2 is TP. P54 Slices are TN.
+        # So we expect Hssayeni_CAD_1_Any_TP_HighSens.png (if thresh < 0.99)
+        # Thresh for 90% sens should be roughly 0.99 (since we have clear separation).
+        # We should check for at least ONE montage file.
+        montage_files = os.listdir(montage_dir)
+        self.assertTrue(len(montage_files) > 0, "No montages generated")
+
+        # Check Confusion Matrix Directory
+        cm_dir = os.path.join('results', 'Confusion_Matrices')
+        self.assertTrue(os.path.exists(cm_dir))
+        cm_files = os.listdir(cm_dir)
+        self.assertTrue(len(cm_files) > 0, "No confusion matrices generated")
 
         # Check CSV
         self.assertTrue(os.path.exists(os.path.join('results', 'auc_scores.csv')))
