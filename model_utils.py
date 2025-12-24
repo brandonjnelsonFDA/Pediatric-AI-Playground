@@ -8,10 +8,7 @@ import albumentations as A
 import torch
 from torch import nn
 from torch.nn import functional as F
-import numpy as np 
-import pydicom
-import nibabel as nib
-import skimage
+import numpy as np
 from monai.transforms import Resize
 
 
@@ -348,6 +345,8 @@ def download_and_unzip(url, extract_to='.'):
         extract_to (str): The directory where the contents should be extracted.
                           Defaults to the current directory.
     """
+    extract_to = Path(extract_to)
+    extract_to.mkdir(parents=True, exist_ok=True)
     try:
         # Download the zip file
         print(f"Downloading from {url}...")

@@ -58,21 +58,21 @@ class TestROCAnalysis(unittest.TestCase):
                 'Intraventricular': low_prob, 'Subarachnoid': low_prob, 'Any': any_ich
             }
 
-        mock_model_instance.get_slice_prediction.side_effect = [
-            # Patient 49 (Slice 1, 2, 3)
+        base_preds = [
+            # Patient 49
             pred(low_prob, low_prob),   # Slice 1 (GT: Neg)
             pred(high_prob, high_prob), # Slice 2 (GT: Pos Epidural)
             pred(low_prob, low_prob),   # Slice 3 (GT: Neg)
-            # Patient 54 (Slice 1, 2, 3)
+            # Patient 54
             pred(low_prob, low_prob),   # Slice 1 (GT: Neg)
             pred(low_prob, low_prob),   # Slice 2 (GT: Neg)
             pred(low_prob, low_prob),   # Slice 3 (GT: Neg)
         ]
 
-        # FIX: Return a list so it can be iterated multiple times (once per patient)
+        mock_model_instance.get_slice_prediction.side_effect = base_preds * 20
+
         mock_models.items.return_value = [('CAD_1', mock_model_instance)]
 
-        # Import the main function to run
         from roc_analysis import main
 
         if os.path.exists('results'):
@@ -83,21 +83,23 @@ class TestROCAnalysis(unittest.TestCase):
         except Exception as e:
             self.fail(f"main() raised {e} unexpectedly!")
 
-        # Verify outputs
         self.assertTrue(os.path.exists('results'))
 
-        # Check plots
-        self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Slice_Overall_ROC.png')))
-        self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Slice_Epidural_ROC.png')))
-        self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Patient_Overall_ROC.png')))
-        self.assertTrue(os.path.exists(os.path.join('results', 'Hssayeni_Patient_Epidural_ROC.png')))
+        # Check Montage - Expect only HighSens
+        montage_dir = os.path.join('results', 'Montages')
+        self.assertTrue(os.path.exists(montage_dir))
+        montage_files = os.listdir(montage_dir)
+        self.assertTrue(len(montage_files) > 0, "No montages generated")
+        for f in montage_files:
+            self.assertIn("HighSens", f, f"Found non-HighSens montage: {f}")
 
-        # Check CSV
-        self.assertTrue(os.path.exists(os.path.join('results', 'auc_scores.csv')))
-        df = pd.read_csv(os.path.join('results', 'auc_scores.csv'))
-
-        self.assertFalse(df[df['Level'] == 'Slice'].empty, "Slice level results missing from CSV")
-        self.assertFalse(df[df['Level'] == 'Patient'].empty, "Patient level results missing from CSV")
+        # Check Performance Metrics CSV
+        metrics_file = os.path.join('results', 'performance_metrics.csv')
+        self.assertTrue(os.path.exists(metrics_file), "performance_metrics.csv missing")
+        df_metrics = pd.read_csv(metrics_file)
+        expected_cols = ['Dataset', 'Level', 'Model', 'Type', 'Threshold_90Sens', 'PPV', 'NPV', 'Prevalence']
+        for col in expected_cols:
+            self.assertIn(col, df_metrics.columns)
 
         if os.path.exists('results'):
             shutil.rmtree('results')
